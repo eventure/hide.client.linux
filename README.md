@@ -109,10 +109,27 @@ host:
   fqdn, short name or an IP address of a hide.me server
   Required when the configuration file does not contain it
 ```
-The hostname of a hide.me REST enpoint may be specified as a fully qualified domain name (nl.hide.me), short name (nl)
+The hostname of a hide.me REST endpoint may be specified as a fully qualified domain name (nl.hide.me), short name (nl)
 or an IP address. There's no guarantee that the REST endpoint will match a WireGuard endpoint.
 
 ## Options
+```
+  -4    Use IPv4 tunneling only
+```
+Limit all IP protocol operations to IPv4. Even though the server will provide IPv4 and IPv6 addressing only IPv4
+addresses, IPv4 rules and IPv4 routes get installed. Leak protection/kill-switch works for IPv4 traffic only. IPv6 
+traffic flow remains unsecured.
+
+**WARNING**: This option degrades security and should be used only when it's safe to do so, e.g. when the client machine
+has it's IPv6 stack disabled. Please, do not use it otherwise because IPv6 leaks may happen.
+```
+  -6   	Use IPv6 tunneling only
+```
+Limit all IP protocol operations to IPv6. Even though the server will provide IPv4 and IPv6 addressing only IPv6
+addresses, IPv6 rules and IPv6 routes get installed. Leak protection/kill-switch works for IPv6 traffic only. IPv4 
+traffic flow remains unsecured.
+
+**WARNING**: This option degrades security and should not be used unless the client wishes to tunnel the IPv6 traffic only.
 ```
   -b filename
     	resolv.conf backup filename (default "/etc/resolv.conf.backup.hide.me")
