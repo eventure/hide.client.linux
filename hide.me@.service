@@ -1,0 +1,33 @@
+[Unit]
+Description=Hide.me CLI connection to %i
+Wants=network-online.target
+After=network-online.target
+DefaultDependencies=yes
+
+[Service]
+Type=notify
+ExecStart=/opt/hide.me/hide.me connect %i
+WorkingDirectory=/opt/hide.me
+ReadWritePaths=/opt/hide.me /etc
+TimeoutStopSec=30
+Restart=always
+RestartSec=5s
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateTmp=true
+PrivateDevices=no
+SystemCallArchitectures=native
+SystemCallFilter=~@module
+SystemCallFilter=~@mount
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+MemoryMax=64M
+User=root
+Group=root
+LimitNOFILE=64
+
+[Install]
+WantedBy=multi-user.target
