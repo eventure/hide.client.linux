@@ -37,6 +37,8 @@ func configure() ( conf *configuration.HideGuardConfiguration, command string ) 
 	flag.String  ( "b",   conf.Link.ResolvConfBackupFile, "resolv.conf backup `filename`" )
 	flag.Duration( "dpd", conf.Link.DpdTimeout, "DPD timeout" )
 	flag.String  ( "s",   conf.Link.SplitTunnel, "comma separated list of `networks` (CIDRs) for which to bypass the VPN" )
+	flag.Bool	 ( "4",   false, "Use IPv4 tunneling only" )
+	flag.Bool	 ( "6",   false, "Use IPv6 tunneling only" )
 	
 	flag.Usage = func() {
 		fmt.Fprint( os.Stderr, "Usage:\n  ", os.Args[0], " [options...] <command> [host]\n\n" )
@@ -84,6 +86,8 @@ func configure() ( conf *configuration.HideGuardConfiguration, command string ) 
 			case "b": conf.Link.ResolvConfBackupFile = f.Value.String()
 			case "dpd": conf.Link.DpdTimeout, err = time.ParseDuration( f.Value.String() ); if err != nil { fmt.Println( "conf: DpdTimeout malformed" ) }
 			case "s": conf.Link.SplitTunnel = f.Value.String()
+			case "4": if f.Value.String() == "true" { conf.Link.IPv4 = true; conf.Link.IPv6 = false }
+			case "6": if f.Value.String() == "true" { conf.Link.IPv4 = false; conf.Link.IPv6 = true }
 		}
 	})
 	if err != nil { return nil, "" }

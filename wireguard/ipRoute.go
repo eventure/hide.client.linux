@@ -24,6 +24,7 @@ func routeString( route *netlink.Route ) ( routeString string ) {
 func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 	// Override default routes OpenVPN def1 style
 	for _, gw := range response.Gateway {
+		if gw.To4() != nil { if ! l.Config.IPv4 { continue } } else { if ! l.Config.IPv6 { continue } }
 		gatewayRoute := &netlink.Route{ LinkIndex: l.wireguardLink.Attrs().Index, Scope: unix.RT_SCOPE_LINK, Dst: netlink.NewIPNet( gw ), Protocol: unix.RTPROT_BOOT, Table: l.Config.RoutingTable, Type: unix.RTN_UNICAST, MTU: l.mtu }
 		// Flags: unix.RTNH_F_ONLINK cannot be used due to missing support on IPv6 with the older kernels, host routes must be used instead
 		// defaultRoute := &netlink.Route{ LinkIndex: l.wireguardLink.Attrs().Index, Scope: unix.RT_SCOPE_UNIVERSE, Gw: gw, Protocol: unix.RTPROT_BOOT, Table: l.Config.RoutingTable, Type: unix.RTN_UNICAST }
@@ -104,9 +105,9 @@ func (l *Link) LoopbackRoutesAdd() ( err error ) {
 		Protocol: unix.RTPROT_BOOT,
 		Table: l.Config.RoutingTable,
 	}
-	routes = append( routes, route )
+	if l.Config.IPv4 { routes = append( routes, route ) }
 	route.Dst = &net.IPNet{ IP: net.ParseIP( "::" ), Mask: net.CIDRMask( 0, 128 ) }						// ::/0 - default
-	routes = append( routes, route )
+	if l.Config.IPv6 { routes = append( routes, route ) }
 	
 	for i, route := range routes {
 		if err = netlink.RouteAdd( &route ); err != nil { fmt.Println( "Link: [ERR] Loopback route", routeString( &route ), "addition failed,", err ); continue }

@@ -19,6 +19,8 @@ type Config struct {
 	ResolvConfBackupFile	string				`yaml:"resolvConfBackupFile,omitempty"`			// Name of the resolv.conf backup file
 	DpdTimeout				time.Duration		`yaml:"dpdTimeout,omitempty"`					// DPD timeout
 	SplitTunnel				string				`yaml:"splitTunnel,omitempty"`					// A comma separated list of networks (CIDRs) for which to bypass the wireguard tunnel ( Split-Tunneling )
+	IPv4					bool				`yaml:"IPv4,omitempty"`							// Add routes and rules for IPv4 protocol family
+	IPv6					bool				`yaml:"IPv6,omitempty"`							// Add routes and rules for IPv6 protocol family
 }
 
 type Link struct {

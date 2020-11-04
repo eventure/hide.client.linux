@@ -23,31 +23,35 @@ func (l *Link) RulesAdd() ( err error ) {
 		}
 	}
 	
-	rule := netlink.NewRule()
-	rule.Priority = 1
-	rule.Family = netlink.FAMILY_V4
-	rule.Table = 254
-	rule.Dst = netlink.NewIPNet( net.ParseIP( "255.255.255.255" ) )
-	if err = netlink.RuleAdd( rule ); err == nil { l.dhcpRule = rule; fmt.Println( "Link: IPv4 DHCP VPN bypass RPDB rule added" )
-	} else { fmt.Println( "Link: [ERR] IPv4 DHCP VPN bypass RPDB rule addition failed,", err ) }
+	if l.Config.IPv4 {
+		rule := netlink.NewRule()
+		rule.Priority = 1
+		rule.Family = netlink.FAMILY_V4
+		rule.Table = 254
+		rule.Dst = netlink.NewIPNet( net.ParseIP( "255.255.255.255" ) )
+		if err = netlink.RuleAdd( rule ); err == nil { l.dhcpRule = rule; fmt.Println( "Link: IPv4 DHCP VPN bypass RPDB rule added" )
+		} else { fmt.Println( "Link: [ERR] IPv4 DHCP VPN bypass RPDB rule addition failed,", err ) }
+		
+		rule = netlink.NewRule()
+		rule.Priority = 10
+		rule.Family = netlink.FAMILY_V4
+		rule.Table = l.Config.RoutingTable
+		rule.Mark = l.Config.FirewallMark
+		rule.Invert = true
+		if err = netlink.RuleAdd( rule ); err == nil { l.markRule = rule; fmt.Println( "Link: IPv4 RPDB rule for non mark", l.Config.FirewallMark, "marked traffic added" )
+		} else { fmt.Println( "Link: [ERR] IPv4 RPDB rule addition failed,", err ) }
+	}
 	
-	rule = netlink.NewRule()
-	rule.Priority = 10
-	rule.Family = netlink.FAMILY_V4
-	rule.Table = l.Config.RoutingTable
-	rule.Mark = l.Config.FirewallMark
-	rule.Invert = true
-	if err = netlink.RuleAdd( rule ); err == nil { l.markRule = rule; fmt.Println( "Link: IPv4 RPDB rule for non mark", l.Config.FirewallMark, "marked traffic added" )
-	} else { fmt.Println( "Link: [ERR] IPv4 RPDB rule addition failed,", err ) }
-	
-	rule = netlink.NewRule()
-	rule.Priority = 10
-	rule.Family = netlink.FAMILY_V6
-	rule.Table = l.Config.RoutingTable
-	rule.Mark = l.Config.FirewallMark
-	rule.Invert = true
-	if err = netlink.RuleAdd( rule ); err == nil { l.markRule6 = rule; fmt.Println( "Link: IPv6 RPDB rule for non mark", l.Config.FirewallMark, "marked traffic added" )
-	} else { fmt.Println( "Link: [ERR] IPv6 RPDB rule addition failed,", err ) }
+	if l.Config.IPv6 {
+		rule := netlink.NewRule()
+		rule.Priority = 10
+		rule.Family = netlink.FAMILY_V6
+		rule.Table = l.Config.RoutingTable
+		rule.Mark = l.Config.FirewallMark
+		rule.Invert = true
+		if err = netlink.RuleAdd( rule ); err == nil { l.markRule6 = rule; fmt.Println( "Link: IPv6 RPDB rule for non mark", l.Config.FirewallMark, "marked traffic added" )
+		} else { fmt.Println( "Link: [ERR] IPv6 RPDB rule addition failed,", err ) }
+	}
 	return
 }
 

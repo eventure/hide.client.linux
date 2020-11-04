@@ -32,6 +32,8 @@ func NewHideGuardConfiguration() *HideGuardConfiguration {
 			ResolvConfBackupFile:	"/etc/resolv.conf.backup.hide.me",			// command line option "-b"
 			DpdTimeout:				time.Minute,								// command line option "-dpd"
 			SplitTunnel:			"",											// command line option "-s"
+			IPv4:					true,										// command line options "-4" and "-6"
+			IPv6:					true,										// command line options "-4" and "-6"
 		},
 		Client: rest.Config{
 			APIVersion:				"v1.0.0",									// Not configurable
