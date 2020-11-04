@@ -11,7 +11,7 @@ features include:
 * Mobility/Roaming support
 * DNS management
 * IPv6 support
-* SystemD notification support
+* systemd notification support
 * Split tunneling
 
 TODO:
@@ -19,13 +19,20 @@ TODO:
 * Automatic server selection
 * Client certificate authentication/authorization
 
-## Installation
+## Build
 
 You may clone this repository and run:
 
 ```go build -o hide.me```
 
 Alternatively, download the latest build from the releases section.
+
+## Installation
+
+Source tree and binary releases contain simple installation and uninstallation scripts. Hide.me CLI gets installed
+in /opt/hide.me directory. Apart from copying hide.me files to /opt/hide.me no modifications to the system are done.<br>
+When systemd based distribution is detected the installer links a template unit file which can be used to instantiate
+connections.
 
 ## Hide.me WireGuard implementation details
 
@@ -112,7 +119,7 @@ host:
 The hostname of a hide.me REST endpoint may be specified as a fully qualified domain name (nl.hide.me), short name (nl)
 or an IP address. There's no guarantee that the REST endpoint will match a WireGuard endpoint.
 
-## Options
+### Options
 ```
   -4    Use IPv4 tunneling only
 ```
@@ -203,6 +210,28 @@ Name of the file which contains an Access-Token.
     	hide.me username
 ```
 Set the hide.me username.
+
+### Integration with systemd
+
+Hide.me CLI can be used standalone or as a systemd service. Using hide.me CLI as a systemd service allows you
+to take advantage of systemd's dependancy resolution, monitoring and various hardening features.<br>
+The installer script links a template unit file hide.me@.service for you or you may manually link the template
+unit file by running:
+
+systemctl link hide.me@service
+
+To manage connections the following commands may be used:
+
+Operation | Command
+--- | ---
+Create a connection | systemctl enable hide.me@SERVER<br>
+Start a connection | systemctl start hide.me@SERVER
+Stop a connection | systemctl stop hide.me@SERVER<br>
+Remove a connection | systemctl disable hide.me@SERVER<br>
+
+SERVER is a server name, group name or an IP address.
+
+Service startup is considered successful when a connection to hide.me server gets completely established. 
 
 ## Contributing
 
