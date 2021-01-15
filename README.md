@@ -158,8 +158,8 @@ an alternate CA certificate bundle file.
   -d DNS servers
     	comma separated list of DNS servers used for client requests (default "209.250.251.37:53,217.182.206.81:53")
 ```
-By default, Hide.me CLI uses hide.me operated DNS servers to resolve VPN server names when issuing token or connect
-requests. The set of DNS servers used for these purposes may be customized with this option.
+By default, Hide.me CLI uses hide.me operated DNS servers to resolve VPN server names when requesting a token or during
+connect requests. The set of DNS servers used for these purposes may be customized with this option.
 ```
   -dpd duration
     	DPD timeout (default 1m0s)

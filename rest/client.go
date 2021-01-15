@@ -39,14 +39,14 @@ type Config struct {
 type Client struct {
 	*Config
 	
-	client				*http.Client
-	transport			*http.Transport
-	resolver			*net.Resolver
-	dnsServers			[]string
-	remote				*net.TCPAddr
+	client					*http.Client
+	transport				*http.Transport
+	resolver				*net.Resolver
+	dnsServers				[]string
+	remote					*net.TCPAddr
 	
-	accessToken			[]byte
-	authorizedPins		[]string
+	accessToken				[]byte
+	authorizedPins			[]string
 }
 
 func NewClient( config *Config ) ( c *Client, err error ) {
@@ -135,7 +135,8 @@ func ( c *Client ) postJson( methodName string, object interface{} ) ( responseB
 	url := "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/" + methodName
 	body, err := json.MarshalIndent( object, "", "\t" )
 	if err != nil { return }
-	connectCtx, _ := context.WithTimeout( context.Background(), c.Config.ConnectTimeout )
+	connectCtx, cancel := context.WithTimeout( context.Background(), c.Config.ConnectTimeout )
+	defer cancel()
 	request, err := http.NewRequestWithContext( connectCtx, "POST", url, bytes.NewReader( body ) )
 	if err != nil { return }
 	request.Header.Add( "content-type", "application/json")
@@ -153,11 +154,11 @@ func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return tru
 func ( c *Client ) Resolve() ( err error ) {
 	if ip := net.ParseIP( c.Config.Host ); ip != nil {											// c.Host is an IP address, allow that
 		c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }									// Set remote endpoint to that IP
-		c.Config.Host = "any.hideservers.net"													// any.hideservers.net is always available
-		c.transport.TLSClientConfig.ServerName = c.Config.Host									// any.hideservers.net is always a certificate SAN
+		c.transport.TLSClientConfig.ServerName = "hideservers.net"								// any.hideservers.net is always a certificate SAN
 		return
 	}
-	ctx, _ := context.WithTimeout( context.Background(), time.Second * 5 )
+	ctx, cancel := context.WithTimeout( context.Background(), time.Second * 5 )
+	defer cancel()
 	addrs, err := c.resolver.LookupIPAddr( ctx, c.Config.Host )									// If DNS fails during reconnect then the remote server address in c.remote will be reused for the reconnection attempt
 	if err != nil {																				// that's cool, but far from optimal
 		fmt.Println( "Resolve: [ERR]", c.Config.Host, "lookup failed,", err )
