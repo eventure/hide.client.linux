@@ -27,12 +27,25 @@ You may clone this repository and run:
 
 Alternatively, download the latest build from the releases section.
 
-## Installation
+## Installation (Manual)
 
 Source tree and binary releases contain simple installation and uninstallation scripts. Hide.me CLI gets installed
 in /opt/hide.me directory. Apart from copying hide.me files to /opt/hide.me no modifications to the system are done.<br>
 When systemd based distribution is detected the installer links a template unit file which can be used to instantiate
 connections.
+
+## Installation (ArchLinux Package)
+
+You can build the package using the PKGBUILD provided in packaging/archlinux/, e.g.:
+
+```
+makepkg && sudo pacman -U hide-client-0.9.1-1-any.pkg.tar.zst 
+```
+Note that the ArchLinux package changes the default locations of the installed files to
+`/usr/bin/hide.me` for the binary,
+`/etc/hide.me/accessToken.txt` for the accessToken,
+`/usr/share/hide.me/CA.pem` for the certificate and
+`/usr/lib/systemd/system/hide.me@service` for the systemd unit.
 
 ## Hide.me WireGuard implementation details
 
