@@ -1,0 +1,3 @@
+[submodule "packaging/archlinux"]
+	path = packaging/archlinux
+	url = https://aur.archlinux.org/hide-client.git
