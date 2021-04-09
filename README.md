@@ -36,8 +36,11 @@ connections.
 
 ## Installation (ArchLinux Package)
 
-You can build the package using the PKGBUILD provided in packaging/archlinux/, e.g.:
+You can build the package using the PKGBUILD provided in packaging/archlinux/
+(requires `git clone --recurse-submodules`) or
+from https://aur.archlinux.org/packages/hide-client/
 
+To build:
 ```
 makepkg && sudo pacman -U hide-client-0.9.1-1-any.pkg.tar.zst 
 ```
