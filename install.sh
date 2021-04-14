@@ -8,9 +8,9 @@ fi
 
 # Create hide.me directory
 mkdir -p /opt/hide.me/
-cp hide.me CA.pem hide.me@.service /opt/hide.me
+cp hide.me CA.pem hide.me@.service config /opt/hide.me
 chmod +x /opt/hide.me/hide.me
-echo "Binary, CA certificate and SystemD service file installed in /opt/hide.me"
+echo "Binary, CA certificate, SystemD service and config file installed in /opt/hide.me"
 
 # Check for the token
 if [ ! -f /opt/hide.me/accessToken.txt ]; then

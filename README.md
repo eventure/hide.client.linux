@@ -247,6 +247,10 @@ Remove a connection | systemctl disable hide.me@SERVER<br>
 
 SERVER is a server name, group name or an IP address.
 
+Additional commandline options to the `hide.me connect` command run by the
+systemd service can be put into the `OPTIONS=` configuration variable in
+`/opt/hide.me/config`.
+
 Service startup is considered successful when a connection to hide.me server gets completely established. 
 
 ## Contributing

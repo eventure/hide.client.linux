@@ -6,9 +6,10 @@ DefaultDependencies=yes
 
 [Service]
 Type=notify
-ExecStart=/opt/hide.me/hide.me connect %i
+ExecStart=/opt/hide.me/hide.me $OPTIONS connect %i
 WorkingDirectory=/opt/hide.me
 ReadWritePaths=/opt/hide.me /etc
+EnvironmentFile=/opt/hide.me/config
 TimeoutStopSec=30
 Restart=always
 RestartSec=5s
