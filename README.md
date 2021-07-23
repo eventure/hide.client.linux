@@ -253,6 +253,26 @@ systemd service can be put into the `OPTIONS=` configuration variable in
 
 Service startup is considered successful when a connection to hide.me server gets completely established. 
 
+### Embedded device alternative to the binary CLI
+
+Hide.me CLI is the best choice for desktop PCs, but may be inappropriate for routers or embedded devices. For those small devices we developed
+a set of ash scripts (in the scripts/ directory):
+
+1. **hide.me-accessToken.ash** obtains a Token (use it whenever you need to update the token, e.g., after a subscription renewal or a password change)
+2. **hide.me-connect.ash** connects to a VPN server of choice and sets up the wireguard interface. Routing is handled in the same way
+as OpenVPN handles it with it's redirect-gateway def1 setting. DNS is installed by backing up and overwriting resolv.conf
+3. **hide.me-disconnect.ash** disconnects from the VPN server, removes routes and restores the DNS
+
+In the header of each script you'll find usage examples.
+
+The functionality of those scripts is basic, i.e. they'll get you connected/disconnected, but won't monitor your connection.
+Such a limited feature set might be just enough to use hide.me with routers which have their own monitoring and fail-over techniques.<br>
+Each script has been verified on OpenWRT based routers with the latest stable firmware (19.07.7) and wireguard support.
+Prerequisites, which should be opkg-installed, are:
+
+1. **curl** issues REST requests
+2. **jq** parses JSON
+
 ## Contributing
 
 If you want to contribute to this project, please read the [contribution guide](https://github.com/eventure/hide.client.linux/blob/master/CONTRIBUTING.md).
