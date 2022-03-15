@@ -9,11 +9,12 @@ import (
 
 // Configure the wireguard interface with the private key and the listen port
 func ( l *Link ) wgLinkUp() ( err error ) {
-	err = l.wgClient.ConfigureDevice( l.Config.Name, wgtypes.Config{
-		PrivateKey:		&l.privateKey,
-		ListenPort:		&l.Config.ListenPort,
-		FirewallMark:	&l.Config.FirewallMark,
-	})
+	wgConfig := wgtypes.Config{
+		PrivateKey:	&l.privateKey,
+		ListenPort:	&l.Config.ListenPort,
+	}
+	if l.Config.FirewallMark > 0 { wgConfig.FirewallMark = &l.Config.FirewallMark }
+	err = l.wgClient.ConfigureDevice( l.Config.Name, wgConfig )
 	if err != nil { fmt.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed,", err ); return }
 	fmt.Println( "Link: Wireguard device", l.Config.Name, "configured" )
 	return
@@ -60,7 +61,7 @@ func ( l *Link ) wgRemovePeer() ( err error ) {
 	return
 }
 
-// Get the traffic counters
+// Acct fetches the traffic counters
 func ( l *Link ) Acct() ( rxBytes, txBytes int64, err error ) {
 	device, err := l.wgClient.Device( l.Config.Name )
 	if err != nil { return }

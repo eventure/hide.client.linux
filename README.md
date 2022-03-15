@@ -7,7 +7,7 @@ features include:
 * Key exchange via RESTful requests secured with TLS 1.3
 * TLS certificate pinning of server's certificates to defeat man-in-the-middle sort of attacks
 * Dead peer detection
-* Leak protection a.k.a. kill-switch based on routing subsystem and packet marking
+* Leak protection a.k.a. kill-switch based on routing subsystem
 * Mobility/Roaming support
 * DNS management
 * IPv6 support
@@ -90,7 +90,6 @@ all traffic unless it meets one of the following conditions:
 * Traffic is local ( loopback interfaces, local broadcasts and IPv6 link-local multicast )
 * DHCPv4 traffic
 * Traffic is explicitly allowed by the means of the Split-tunneling option
-* Traffic is marked
 * Traffic is about to be tunneled
 
 This mode of operation makes it possible for the users to establish their own firewalling policies with which hide.me CLI
@@ -191,16 +190,12 @@ Use this option to specify the name of the networking interface to create or use
   -l port
     	listen port
 ```
-WireGuard kernel module may listen on a user-defined port for encrypted traffic.
+Specify a listen port for encrypted WireGuard traffic.
 ```
   -m mark
-    	firewall mark for wireguard and hide.me client originated traffic (default 55555)
+    	firewall mark for wireguard traffic (default 0 - no packet marks)
 ```
-Hide.me CLI takes advantage of the WireGuard module's ability to mark WireGuard traffic. Packet marks make it possible for
-Linux to selectively route traffic according to RPDB policies.
-
-Setting this option to any other value than 0 is supported, however setting it to 0 is not as such a setting turns off
-the required functionality.
+Set the firewall mark the WireGuard kernel module will mark its packets with.
 ```
   -p port
     	remote port (default 432)
@@ -211,6 +206,12 @@ Remote REST endpoint port may be changed with this option.
     	routing table to use (default 55555)
 ```
 Set the routing table to use for general traffic and leak protection mechanism.
+```
+  -R priority
+    	RPDB rule priority (default 10)
+```
+Set the priority of installed RPDB rules. Hide.me CLI takes advantage of policy routing by installing a RPDB rule (one per
+IP protocol) in order to drive traffic to a chosen routing table and ensure IP leak protection.
 ```
   -s networks
     	comma separated list of networks (CIDRs) for which to bypass the VPN

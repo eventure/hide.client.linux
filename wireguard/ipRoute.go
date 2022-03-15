@@ -9,6 +9,9 @@ import (
 	"strconv"
 )
 
+var Mask32 = net.CIDRMask( 32, 32 )
+var Mask128 = net.CIDRMask( 128, 128 )
+
 func routeString( route *netlink.Route ) ( routeString string ) {
 	routeOnes, _ := route.Dst.Mask.Size()
 	routeString = route.Dst.IP.String() + "/" + strconv.Itoa( routeOnes )
@@ -18,6 +21,11 @@ func routeString( route *netlink.Route ) ( routeString string ) {
 	routeString += " mtu " + strconv.Itoa( route.MTU )
 	if route.Table != 254 { routeString += " table " + strconv.Itoa( route.Table ) }
 	return
+}
+
+func Ip2Net( ip net.IP ) *net.IPNet {
+	if ip.To4() != nil { return &net.IPNet{ IP: ip, Mask: Mask32 } }
+	return &net.IPNet{ IP: ip, Mask: Mask128 }
 }
 
 // Add the routes to the configured table
@@ -91,7 +99,7 @@ func (l *Link) ipRoutesRemove() ( err error ) {
 	return
 }
 
-// Add loopback default routes to l.Config.RoutingTable table
+// LoopbackRoutesAdd adds default routes to l.Config.RoutingTable table which point to loopback interface
 func (l *Link) LoopbackRoutesAdd() ( err error ) {
 	switch l.Config.RoutingTable { case 0, 253, 254, 255: return }										// Skip for unspecified, default, main and local routing tables
 	routes := []netlink.Route(nil)
@@ -117,7 +125,7 @@ func (l *Link) LoopbackRoutesAdd() ( err error ) {
 	return
 }
 
-// Remove default routes from l.Config.RoutingTable table
+// LoopbackRoutesDel removes default routes from l.Config.RoutingTable table
 func (l *Link) LoopbackRoutesDel() {
 	switch l.Config.RoutingTable { case 0, 253, 254, 255: return }										// Skip for unspecified, default, main and local routing tables
 	for _, route := range l.loopbackRoutes {
@@ -125,4 +133,34 @@ func (l *Link) LoopbackRoutesDel() {
 		fmt.Println( "Link: Loopback route", routeString( route ), "removed" )
 	}
 	l.loopbackRoutes = nil
+}
+
+// ThrowRouteAdd adds a "throw" route
+func (l *Link) ThrowRouteAdd( logPrefix string, dst *net.IPNet ) ( err error ) {
+	switch l.Config.RoutingTable { case 0, 253, 254, 255: return }										// Skip for unspecified, default, main and local routing tables
+	route := netlink.Route{
+		Scope:      unix.RT_SCOPE_UNIVERSE,
+		Dst:        dst,
+		Protocol:   unix.RTPROT_BOOT,
+		Table:		l.Config.RoutingTable,
+		Type:       unix.RTN_THROW,
+	}
+	if err = netlink.RouteAdd( &route ); err != nil { fmt.Println( "Link: [ERR]", logPrefix, "throw route", routeString( &route ), "addition failed,", err ); return }
+	fmt.Println( "Link:", logPrefix, "throw route", routeString( &route ), "added" )
+	return
+}
+
+// ThrowRouteDel removes a "throw" route
+func (l *Link) ThrowRouteDel( logPrefix string, dst *net.IPNet ) ( err error ) {
+	switch l.Config.RoutingTable { case 0, 253, 254, 255: return }										// Skip for unspecified, default, main and local routing tables
+	route := netlink.Route{
+		Scope:      unix.RT_SCOPE_UNIVERSE,
+		Dst:        dst,
+		Protocol:   unix.RTPROT_BOOT,
+		Table:		l.Config.RoutingTable,
+		Type:       unix.RTN_THROW,
+	}
+	if err = netlink.RouteDel( &route ); err != nil { fmt.Println( "Link: [ERR]", logPrefix, "throw route", routeString( &route ), "deletion failed,", err ); return }
+	fmt.Println( "Link:", logPrefix, "throw route", routeString( &route ), "deleted" )
+	return
 }

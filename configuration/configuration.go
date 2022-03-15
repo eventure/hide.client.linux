@@ -16,18 +16,19 @@ import (
 	"time"
 )
 
-type HideGuardConfiguration struct {
+type Configuration struct {
 	Client			rest.Config			`yaml:"client,omitempty"`
 	Link			wireguard.Config	`yaml:"link,omitempty"`
 }
 
-func NewHideGuardConfiguration() *HideGuardConfiguration {
-	h := &HideGuardConfiguration{												// Defaults
+func NewConfiguration() *Configuration {
+	h := &Configuration{														// Defaults
 		Link: wireguard.Config{
 			Name:					"vpn",										// command line option "-i"
 			ListenPort:				0,											// command line option "-l"
-			FirewallMark:			55555,										// command line option "-m"
+			FirewallMark:			0,											// command line option "-m"
 			RoutingTable:			55555,										// command line option "-r"
+			RPDBPriority:			10,											// command line option "-R"
 			LeakProtection:			true,										// command line option "-k"
 			ResolvConfBackupFile:	"/etc/resolv.conf.backup.hide.me",			// command line option "-b"
 			DpdTimeout:				time.Minute,								// command line option "-dpd"
@@ -46,14 +47,14 @@ func NewHideGuardConfiguration() *HideGuardConfiguration {
 			Password:				"",											// Only configurable through the config file
 			ConnectTimeout: 		10 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
-			FirewallMark:			55555,										// command line option "-m"
+			FirewallMark:			0,											// command line option "-m"
 			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"
 		},
 	}
 	return h
 }
 
-func ( c *HideGuardConfiguration ) Read( fileName string ) ( err error ) {
+func ( c *Configuration ) Read( fileName string ) ( err error ) {
 	if len( fileName ) == 0 { return }
 	bytes, err := ioutil.ReadFile( fileName )
 	if err != nil {
@@ -64,7 +65,7 @@ func ( c *HideGuardConfiguration ) Read( fileName string ) ( err error ) {
 	return
 }
 
-func ( c *HideGuardConfiguration ) Store( fileName string ) ( err error ) {
+func ( c *Configuration ) Store( fileName string ) ( err error ) {
 	if len( fileName ) == 0 { return }
 	configurationYaml, err := yaml.Marshal( c )
 	if err != nil { return }
@@ -72,7 +73,7 @@ func ( c *HideGuardConfiguration ) Store( fileName string ) ( err error ) {
 	return
 }
 
-func ( c *HideGuardConfiguration ) Check() ( err error ) {
+func ( c *Configuration ) Check() ( err error ) {
 	if c.Client.Domain != "hide.me" { err = errors.New( "configured domain mismatch" ); return }
 	if len( c.Client.Host ) == 0 { err = errors.New( "missing hostname" ); return }
 	if c.Client.Port == 0 { err = errors.New( "bad remote port " + strconv.Itoa( c.Client.Port ) ); return }
@@ -84,20 +85,19 @@ func ( c *HideGuardConfiguration ) Check() ( err error ) {
 		fmt.Println( "conf: [WARNING] Using port 443, API unstable" )
 		c.Client.APIVersion = "v1"
 	}
-	if c.Link.FirewallMark == 0 { err = errors.New( "firewallMark is zero" ); return }
 	return
 }
 
-// Add .hideservers.net suffix for short names ( nl becomes nl.hideservers.net ) or remove .hide.me and replace it with .hideservers.net.
-func ( c *HideGuardConfiguration ) AdjustHost() {
+// AdjustHost adds .hideservers.net suffix for short names ( nl becomes nl.hideservers.net ) or removes .hide.me and replaces it with .hideservers.net.
+func ( c *Configuration ) AdjustHost() {
 	if net.ParseIP( c.Client.Host ) != nil { return }
 	if strings.HasSuffix( c.Client.Host, ".hideservers.net" ) { return }
 	c.Client.Host = strings.TrimSuffix( c.Client.Host, ".hide.me" )
 	c.Client.Host += ".hideservers.net"
 }
 
-// Ask for username/password if none were configured
-func ( c *HideGuardConfiguration ) InteractiveCredentials() ( err error ) {
+// InteractiveCredentials asks for username/password when no such credentials were configured
+func ( c *Configuration ) InteractiveCredentials() ( err error ) {
 	if len( c.Client.Username ) > 0 && len( c.Client.Password ) > 0 { return }
 	if ! terminal.IsTerminal( syscall.Stdin ) { err = errors.New( "not a terminal" ); return }
 	if len( c.Client.Username ) == 0 {
@@ -117,7 +117,7 @@ func ( c *HideGuardConfiguration ) InteractiveCredentials() ( err error ) {
 	return
 }
 
-func ( c *HideGuardConfiguration ) Print() {
+func ( c *Configuration ) Print() {
 	if out, err := yaml.Marshal( c ); err != nil { fmt.Println( err ) } else { fmt.Print( string( out ) ) }
 	return
 }

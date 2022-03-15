@@ -10,13 +10,14 @@ fi
 mkdir -p /opt/hide.me/
 cp hide.me CA.pem hide.me@.service config /opt/hide.me
 chmod +x /opt/hide.me/hide.me
+touch /opt/hide.me/config
 echo "Binary, CA certificate, SystemD service and config file installed in /opt/hide.me"
 
 # Check for the token
 if [ ! -f /opt/hide.me/accessToken.txt ]; then
     echo "Hide.me CLI needs to fetch a token. Please, provide your hide.me credentials"
     cd /opt/hide.me
-    ./hide.me token any.hideservers.net
+    ./hide.me token free.hideservers.net
 else
     echo "Reusing token in /opt/hide.me/accessToken.txt"
 fi
