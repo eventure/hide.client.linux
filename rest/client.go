@@ -81,7 +81,7 @@ func NewClient( config *Config ) ( c *Client, err error ) {
 		for _, dnsServer := range strings.Split( c.Config.DnsServers, "," ) {
 			c.dnsServers = append( c.dnsServers, strings.TrimSpace( dnsServer ) )
 		}
-	} else { c.dnsServers = append( c.dnsServers, "8.8.8.8:53", "8.8.4.4:53" ) }
+	} else { c.dnsServers = append( c.dnsServers, "1.1.1.1:53" ) }
 	if len( config.AccessTokenFile ) > 0 {
 		accessTokenBytes, acErr := ioutil.ReadFile( config.AccessTokenFile )
 		if acErr == nil { c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ) }
@@ -93,9 +93,9 @@ func NewClient( config *Config ) ( c *Client, err error ) {
 	return
 }
 
-func (c *Client) Remote() *net.TCPAddr { return c.remote }
+func ( c *Client ) Remote() *net.TCPAddr { return c.remote }
 
-// Check public key pins of authorized hide.me/hideservers.net CA certificates
+// Pins checks public key pins of authorized hide.me/hideservers.net CA certificates
 func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error {
 	for _, chain := range verifiedChains {
 		chainLoop:
@@ -116,16 +116,17 @@ func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error
 	return nil
 }
 
-// Custom dialContext to set the mark on the sockets
+// Custom dialContext to set the socket mark on sockets
 func ( c *Client ) dialContext( ctx context.Context, network, addr string ) ( net.Conn, error ) {
-	dialer := &net.Dialer{
-		Control: func( _, _ string, rawConn syscall.RawConn ) ( err error ) {
-			rawConn.Control( func( fd uintptr ) {
-				 err = syscall.SetsockoptInt( int(fd), unix.SOL_SOCKET, unix.SO_MARK, c.Config.FirewallMark )
-				 if err != nil { fmt.Println( "Dial: [ERR] Set mark failed,", err ) }
+	dialer := &net.Dialer{}
+	if c.Config.FirewallMark > 0 {
+		dialer.Control = func( _, _ string, rawConn syscall.RawConn ) ( err error ) {
+			_ = rawConn.Control( func( fd uintptr ) {
+				err = syscall.SetsockoptInt( int(fd), unix.SOL_SOCKET, unix.SO_MARK, c.Config.FirewallMark )
+				if err != nil { fmt.Println( "Dial: [ERR] Set mark failed,", err ) }
 			})
 			return
-		},
+		}
 	}
 	if network == "udp" { addr = c.dnsServers[ rand.Intn( len( c.dnsServers ) ) ] }
 	return dialer.DialContext( ctx, network, addr )
@@ -150,7 +151,7 @@ func ( c *Client ) postJson( methodName string, object interface{} ) ( responseB
 
 func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return true }; return false }
 
-// Resolves the IP of hide.me endpoint and stores that IP for further use. Hide.me balances DNS rapidly, so once an IP is acquired it needs to be used for the remainder of the session
+// Resolve resolves an IP of a Hide.me endpoint and stores that IP for further use. Hide.me balances DNS rapidly, so once an IP is acquired it needs to be used for the remainder of the session
 func ( c *Client ) Resolve() ( err error ) {
 	if ip := net.ParseIP( c.Config.Host ); ip != nil {											// c.Host is an IP address, allow that
 		c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }									// Set remote endpoint to that IP
@@ -173,7 +174,7 @@ func ( c *Client ) Resolve() ( err error ) {
 	return
 }
 
-// Hide.me "Connect" endpoint expects an ordinary POST request with a ConnectRequest JSON payload
+// Connect issues a connect request to a Hide.me "Connect" endpoint which expects an ordinary POST request with a ConnectRequest JSON payload
 func ( c *Client ) Connect( key wgtypes.Key ) ( connectResponse *ConnectResponse, err error ) {
 	connectRequest := &ConnectRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
@@ -191,7 +192,7 @@ func ( c *Client ) Connect( key wgtypes.Key ) ( connectResponse *ConnectResponse
 	return
 }
 
-// Hide.me "Disconnect" endpoint expects an ordinary POST request with a DisconnectRequest JSON payload
+// Disconnect issues a disconnect request to a Hide.me "Disconnect" endpoint which expects an ordinary POST request with a DisconnectRequest JSON payload
 func ( c *Client ) Disconnect( sessionToken []byte ) ( err error ) {
 	disconnectRequest := &DisconnectRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
@@ -204,7 +205,7 @@ func ( c *Client ) Disconnect( sessionToken []byte ) ( err error ) {
 	return
 }
 
-// Hide.me "AccessToken" endpoint expects an ordinary POST request with a AccessTokenRequest JSON payload
+// GetAccessToken issues an AccessToken request to a Hide.me "AccessToken" endpoint which expects an ordinary POST request with a AccessTokenRequest JSON payload
 func ( c *Client ) GetAccessToken() ( err error ) {
 	accessTokenRequest := &AccessTokenRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),

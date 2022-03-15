@@ -8,6 +8,7 @@ import (
 	"github.com/eventure/hide.client.linux/configuration"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/eventure/hide.client.linux/wireguard"
+	"net"
 	"net/url"
 	"os"
 	"os/signal"
@@ -18,8 +19,8 @@ import (
 )
 
 // Set up and parse flags, read the configuration file
-func configure() ( conf *configuration.HideGuardConfiguration, command string ) {
-	conf = configuration.NewHideGuardConfiguration()
+func configure() ( conf *configuration.Configuration, command string ) {
+	conf = configuration.NewConfiguration()
 	configurationFileName := flag.String( "c", "", "Configuration `filename`" )																// General flags
 	
 	flag.Int   ( "p",  conf.Client.Port, "remote `port`" )																					// REST related flags
@@ -33,6 +34,7 @@ func configure() ( conf *configuration.HideGuardConfiguration, command string ) 
 	flag.Int     ( "l",   conf.Link.ListenPort, "listen `port`" )
 	flag.Int     ( "m",   conf.Link.FirewallMark, "firewall `mark` for wireguard and hide.me client originated traffic" )
 	flag.Int     ( "r",   conf.Link.RoutingTable, "routing `table` to use" )
+	flag.Int     ( "R",   conf.Link.RPDBPriority, "RPDB rule `priority`" )
 	flag.Bool	 ( "k",   conf.Link.LeakProtection, "enable/disable leak protection a.k.a. kill-switch" )
 	flag.String  ( "b",   conf.Link.ResolvConfBackupFile, "resolv.conf backup `filename`" )
 	flag.Duration( "dpd", conf.Link.DpdTimeout, "DPD timeout" )
@@ -81,6 +83,7 @@ func configure() ( conf *configuration.HideGuardConfiguration, command string ) 
 			case "l": conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }
 			case "m": conf.Link.FirewallMark, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: FirewallMark malformed" ) }
 					  conf.Client.FirewallMark = conf.Link.FirewallMark
+			case "R": conf.Link.RPDBPriority, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: RPDBPriority malformed" ) }
 			case "r": conf.Link.RoutingTable, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: RoutingTable malformed" ) }
 			case "k": if f.Value.String() == "false" { conf.Link.LeakProtection = false }
 			case "b": conf.Link.ResolvConfBackupFile = f.Value.String()
@@ -99,7 +102,7 @@ func configure() ( conf *configuration.HideGuardConfiguration, command string ) 
 }
 
 // Get the Access-Token
-func accessToken( conf *configuration.HideGuardConfiguration ) {
+func accessToken( conf *configuration.Configuration ) {
 	if conf.Client.AccessTokenFile == "" { fmt.Println( "Main: [ERR] Access-Token must be stored to a file" ); return }
 	client, err := rest.NewClient( &conf.Client )																							// Create the REST client
 	if err != nil { fmt.Println( "Main: [ERR] REST Client setup failed,", err ); return }
@@ -113,7 +116,7 @@ func accessToken( conf *configuration.HideGuardConfiguration ) {
 }
 
 // Connect
-func connect( conf *configuration.HideGuardConfiguration ) {
+func connect( conf *configuration.Configuration ) {
 	client, err := rest.NewClient( &conf.Client )																							// Create the REST client
 	if err != nil { fmt.Println( "Main: [ERR] REST Client setup failed,", err ); return }
 	if ! client.HaveAccessToken() { fmt.Println( "Main: [ERR] No Access-Token available" ); return }										// Access-Token is required for the Connect/Disconnect methods
@@ -121,12 +124,36 @@ func connect( conf *configuration.HideGuardConfiguration ) {
 	link := wireguard.NewLink( conf.Link )
 	if err = link.Open(); err != nil { fmt.Println( "Main: [ERR] Wireguard open failed,", err ); return }									// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
 	defer link.Close()
-	err = link.RulesAdd(); defer link.RulesDel()																							// Add the mark based RPDB rules which direct traffic to configured routing tables
-	if err != nil { fmt.Println( "Main: [ERR] RPDB rules failed,", err ); return }
-	if conf.Link.LeakProtection {																											// Add the "loopback" default routes to the configured routing tables ( IP leak protection )
-		err = link.LoopbackRoutesAdd(); defer link.LoopbackRoutesDel()
-		if err != nil { fmt.Println( "Main: [ERR] Addition of loopback routes failed,", err ); return }
+	
+	dhcpDestination := &net.IPNet{IP: []byte{ 255, 255, 255, 255 }, Mask: []byte{ 255, 255, 255, 255 } }									// IPv4 DHCP VPN bypass "throw" route
+	if err = link.ThrowRouteAdd( "DHCP bypass", dhcpDestination ); err != nil { fmt.Println( "Main: [ERR] DHCP bypass route failed,", err ); return }
+	defer link.ThrowRouteDel( "DHCP bypass", dhcpDestination )
+	
+	if len( conf.Client.DnsServers ) > 0 {
+		for _, dnsServer := range strings.Split( conf.Client.DnsServers, "," ) {															// throw routes for configured DNS servers
+			udpAddr, err := net.ResolveUDPAddr( "udp", dnsServer )
+			if err != nil { fmt.Println( "Main: [ERR] DNS server address resolve failed,", err ); return }
+			if err = link.ThrowRouteAdd( "DNS server", wireguard.Ip2Net( udpAddr.IP ) ); err != nil { fmt.Println( "Main: [ERR] Route DNS server failed,", err ); return }
+			defer link.ThrowRouteDel( "DNS server", wireguard.Ip2Net( udpAddr.IP ) )
+		}
 	}
+	
+	if len( conf.Link.SplitTunnel ) > 0 {
+		for _, network := range strings.Split( conf.Link.SplitTunnel, "," ) {																// throw routes for split-tunnel destinations
+			_, ipNet, err := net.ParseCIDR( network )
+			if err != nil { fmt.Println( "Main: [ERR] Parse split-tunnel route from", network, "failed,", err ); return }
+			if err = link.ThrowRouteAdd( "Split-Tunnel", ipNet ); err != nil { fmt.Println( "Main: [ERR] Split-tunnel route to ", network, "failed,", err ); return }
+			defer link.ThrowRouteDel( "Split-Tunnel", ipNet )
+		}
+	}
+	
+	if conf.Link.LeakProtection {																											// Add the "loopback" default routes to the configured routing tables ( IP leak protection )
+		if err = link.LoopbackRoutesAdd(); err != nil { fmt.Println( "Main: [ERR] Addition of loopback routes failed,", err ); return }
+		defer link.LoopbackRoutesDel()
+	}
+	
+	err = link.RulesAdd(); defer link.RulesDel()																							// Add the RPDB rules which direct traffic to configured routing tables
+	if err != nil { fmt.Println( "Main: [ERR] RPDB rules failed,", err ); return }
 	
 	dpdContext, dpdCancel := context.Context(nil), context.CancelFunc(nil)
 	go func() {																																// Wait for signals
@@ -134,30 +161,22 @@ func connect( conf *configuration.HideGuardConfiguration ) {
 		signal.Notify( signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL )
 		for { receivedSignal := <- signalChannel; fmt.Println( "Main: Terminating on", receivedSignal.String() ); dpdCancel() }				// Cancelling the DPD context results in the client's termination
 	}()
-
-	connectLoop:
-	for {
+	
+	up := func() error {
 		dpdContext, dpdCancel = context.WithTimeout( context.Background(), time.Second * 86380 )											// Hide.me sessions last up to 86400 seconds ( 20 seconds of slack should be enough for DNS and connection establishment )
-		if err = client.Resolve(); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); break }										// Resolve the remote address
-		fmt.Println( "Main: Connecting to", client.Remote() )
-		connectResponse, connectErr := client.Connect( link.PublicKey() )																	// Connect
-		if connectErr != nil {
-			if urlError, ok := connectErr.( *url.Error ); ok {
-				if urlError.Unwrap() == context.DeadlineExceeded {																			// When the connection attempt timed out, try again
-					fmt.Println( "Main: [ERR] Connection timed out, reconnecting in", conf.Client.ConnectTimeout )
-					select {
-					case <- dpdContext.Done(): break connectLoop
-					case <- time.After( conf.Client.ConnectTimeout ): continue connectLoop
-					}
-				}
-			}
-			fmt.Println( "Main: [ERR] Connect failed,", connectErr ); err = connectErr
-			break
-		}
+		if resolveErr := client.Resolve(); resolveErr != nil { fmt.Println( "Main: [ERR] DNS failed,", resolveErr ); return resolveErr }	// Resolve the remote address
+		serverIpNet := wireguard.Ip2Net( client.Remote().IP )
+		
+		fmt.Println( "Main: Connecting to", serverIpNet.IP )																				// Add the throw route in order to reach Hide.me
+		if throwRouteAddErr := link.ThrowRouteAdd( "VPN server", serverIpNet ); throwRouteAddErr != nil { return throwRouteAddErr }
+		defer link.ThrowRouteDel( "VPN server", serverIpNet )
+	
+		connectResponse, connectErr := client.Connect( link.PublicKey() )																	// Issue a REST Connect request
+		if connectErr != nil { if urlError, ok := connectErr.( *url.Error ); ok { return urlError.Unwrap() }; return connectErr }
 		fmt.Println( "Main: Connected to", client.Remote() )
 		connectResponse.Print()																												// Print the response attributes ( connection properties )
 		
-		if err = link.Up( connectResponse ); err != nil { fmt.Println( "Main: [ERR] Link up failed,", err ); break }						// Configure the wireguard interface, must succeed
+		if upErr := link.Up( connectResponse ); upErr != nil { fmt.Println( "Main: [ERR] Link up failed,", upErr ); return upErr }			// Configure the wireguard interface, must succeed
 		
 		if connectResponse.StaleAccessToken && len( conf.Client.AccessTokenFile ) > 0 {														// When the Access-Token is stale and when it is kept saved refresh it
 			go func() {
@@ -170,22 +189,43 @@ func connect( conf *configuration.HideGuardConfiguration ) {
 			} ()
 		}
 		
-		if _, err := daemon.SdNotify( false, daemon.SdNotifyReady ); err != nil { fmt.Println( err, "Main: SystemD notification failed" ) }	// Send SystemD notification
-		dpdErr := link.DPD( dpdContext )																									// Start the dead peer detection loop
-		if err = client.Disconnect( connectResponse.SessionToken ); err != nil { fmt.Println( "Main: [ERR] Disconnect failed,", err )
-		} else { fmt.Println( "Main: Disconnected" ) }
-		
-		if err = link.Down(); err != nil { fmt.Println( "Main: [ERR] link down failed,", err ); break }										// Remove the DNS, rules, routes, addresses and the peer, must succeed
-		switch dpdErr {
-			case context.Canceled: break connectLoop																						// DPD was explicitly cancelled
-			case wireguard.ErrTooManyPeers: break connectLoop																				// Wireguard interface has more than one peer defined
-			case context.DeadlineExceeded, wireguard.ErrDpdTimeout: continue connectLoop													// Reconnect when there's a DPD timeout or when this session times out
+		if supported, notificationErr := daemon.SdNotify( false, daemon.SdNotifyReady ); supported && err != nil {							// Send SystemD ready notification
+			fmt.Println( "Main: [ERR] SystemD notification failed,", notificationErr )
 		}
+		
+		dpdErr := link.DPD( dpdContext )																									// Start the dead peer detection loop
+		if err = client.Disconnect( connectResponse.SessionToken ); err != nil { fmt.Println( "Main: [ERR] Disconnect POST failed,", err ) }// POST the "Disconnect" request
+		fmt.Println( "Main: Disconnected" )
+		link.Down()																															// Remove the DNS, rules, routes, addresses and the peer, must succeed
+		
+		return dpdErr
 	}
-	if err != nil {																															// For loop exit happened because of an error
-		fmt.Println( "Main: [ERR] Connection setup/teardown failed, traffic blocked, waiting for a termination signal" )					// The client won't exit yet because the traffic should be blocked until an operator intervenes
-		dpdContext, dpdCancel = context.WithCancel( context.Background() )
-		<- dpdContext.Done()
+	
+	connectLoop:
+	for {
+		err = up()																															// Establish the connection
+		if err == wireguard.ErrDpdTimeout {																									// Reconnect when there's a DPD timeout
+			select {
+				case <- dpdContext.Done(): err = context.Canceled; break connectLoop
+				case <- time.After( conf.Client.ConnectTimeout ): continue connectLoop
+			}
+		}
+		if err == context.DeadlineExceeded {																								// Reconnect when this session times out
+			select {
+				case <- time.After( conf.Client.ConnectTimeout ): continue connectLoop
+			}
+		}
+		break
+	}
+	if err != context.Canceled {																											// For loop exit happened because of an error
+		if conf.Link.LeakProtection {
+			fmt.Println( "Main: [ERR] Connection setup/teardown failed, traffic blocked, waiting for a termination signal" )				// The client won't exit yet because the traffic should be blocked until an operator intervenes
+			dpdContext, dpdCancel = context.WithCancel( context.Background() )
+			<- dpdContext.Done()
+		} else {
+			fmt.Println( "Main: No leak protection active, exiting immediately")
+		}
+		
 	}
 	daemon.SdNotify( false, daemon.SdNotifyStopping )																						// Send SystemD notification
 }
