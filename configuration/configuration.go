@@ -17,8 +17,8 @@ import (
 )
 
 type Configuration struct {
-	Client			rest.Config			`yaml:"client,omitempty"`
-	Link			wireguard.Config	`yaml:"link,omitempty"`
+	Client	rest.Config			`yaml:"client,omitempty"`
+	Link	wireguard.Config	`yaml:"link,omitempty"`
 }
 
 func NewConfiguration() *Configuration {
@@ -45,7 +45,8 @@ func NewConfiguration() *Configuration {
 			AccessTokenFile:		"accessToken.txt",							// command line option "-t"
 			Username:       		"",											// command line option "-u"
 			Password:				"",											// Only configurable through the config file
-			ConnectTimeout: 		10 * time.Second,							// Only configurable through the config file
+			RestTimeout:	 		10 * time.Second,							// Only configurable through the config file
+			ReconnectWait:	 		5 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
 			FirewallMark:			0,											// command line option "-m"
 			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"

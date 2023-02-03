@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -106,11 +107,13 @@ func accessToken( conf *configuration.Configuration ) {
 	if conf.Client.AccessTokenFile == "" { fmt.Println( "Main: [ERR] Access-Token must be stored to a file" ); return }
 	client, err := rest.NewClient( &conf.Client )																							// Create the REST client
 	if err != nil { fmt.Println( "Main: [ERR] REST Client setup failed,", err ); return }
-	if ! client.HaveAccessToken() {																											// An old Access-Token may be used to obtain a new one, although that process may be done by "connect" too
+	if !client.HaveAccessToken() {																											// An old Access-Token may be used to obtain a new one, although that process may be done by "connect" too
 		if err = conf.InteractiveCredentials(); err != nil { fmt.Println( "Main: [ERR] Credential error,", err ); return }					// Try to obtain the credentials through the terminal
 	}
-	if err = client.Resolve(); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }											// Resolve the REST endpoint
-	if err = client.GetAccessToken(); err != nil { fmt.Println( "Main: [ERR] Access-Token request failed,", err ); return }					// Request an Access-Token
+	tokenCtx, cancel := context.WithTimeout( context.Background(), conf.Client.RestTimeout )
+	defer cancel()
+	if err = client.Resolve( tokenCtx ); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }								// Resolve the REST endpoint
+	if err = client.GetAccessToken( tokenCtx ); err != nil { fmt.Println( "Main: [ERR] Access-Token request failed,", err ); return }		// Request an Access-Token
 	fmt.Println( "Main: Access-Token stored in", conf.Client.AccessTokenFile )
 	return
 }
@@ -155,28 +158,31 @@ func connect( conf *configuration.Configuration ) {
 	err = link.RulesAdd(); defer link.RulesDel()																							// Add the RPDB rules which direct traffic to configured routing tables
 	if err != nil { fmt.Println( "Main: [ERR] RPDB rules failed,", err ); return }
 	
-	dpdContext, dpdCancel := context.Context(nil), context.CancelFunc(nil)
-	go func() {																																// Wait for signals
-		signalChannel := make ( chan os.Signal )
-		signal.Notify( signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL )
-		for { receivedSignal := <- signalChannel; fmt.Println( "Main: Terminating on", receivedSignal.String() ); dpdCancel() }				// Cancelling the DPD context results in the client's termination
-	}()
-	
-	up := func() error {
-		dpdContext, dpdCancel = context.WithTimeout( context.Background(), time.Second * 86380 )											// Hide.me sessions last up to 86400 seconds ( 20 seconds of slack should be enough for DNS and connection establishment )
-		if resolveErr := client.Resolve(); resolveErr != nil { fmt.Println( "Main: [ERR] DNS failed,", resolveErr ); return resolveErr }	// Resolve the remote address
+	upCh := make( chan error )																												// Carries client errors
+	upCancel := context.CancelFunc(nil)																										// When a client runs it can be cancelled ( upCancel is not NIL )
+	upCancelLock := sync.Mutex{}																											// Updating/testing upCancel is racy
+	up := func() {
+		var upErr error
+		defer func() { upCancelLock.Lock(); upCancel = nil; upCancelLock.Unlock(); upCh <- upErr } ()
+		var upCtx context.Context
+		upCancelLock.Lock()
+		upCtx, upCancel = context.WithTimeout( context.Background(), time.Second * 84000 )													// Hide.me sessions last up to 86400 seconds
+		defer upCancel()
+		upCancelLock.Unlock()
+		
+		if upErr = client.Resolve( upCtx ); upErr != nil { fmt.Println( "Main: [ERR] DNS failed,", upErr ); return }						// Resolve the remote address
 		serverIpNet := wireguard.Ip2Net( client.Remote().IP )
 		
 		fmt.Println( "Main: Connecting to", serverIpNet.IP )																				// Add the throw route in order to reach Hide.me
-		if throwRouteAddErr := link.ThrowRouteAdd( "VPN server", serverIpNet ); throwRouteAddErr != nil { return throwRouteAddErr }
+		if upErr = link.ThrowRouteAdd( "VPN server", serverIpNet ); upErr != nil { return }
 		defer link.ThrowRouteDel( "VPN server", serverIpNet )
 	
-		connectResponse, connectErr := client.Connect( link.PublicKey() )																	// Issue a REST Connect request
-		if connectErr != nil { if urlError, ok := connectErr.( *url.Error ); ok { return urlError.Unwrap() }; return connectErr }
+		connectResponse, upErr := client.Connect( upCtx, link.PublicKey() )																	// Issue a REST Connect request
+		if upErr != nil { if urlError, ok := upErr.( *url.Error ); ok { upErr = urlError.Unwrap() }; return }
 		fmt.Println( "Main: Connected to", client.Remote() )
 		connectResponse.Print()																												// Print the response attributes ( connection properties )
 		
-		if upErr := link.Up( connectResponse ); upErr != nil { fmt.Println( "Main: [ERR] Link up failed,", upErr ); return upErr }			// Configure the wireguard interface, must succeed
+		if upErr = link.Up( connectResponse ); upErr != nil { fmt.Println( "Main: [ERR] Link up failed,", upErr ); return }					// Configure the wireguard interface, must succeed
 		
 		if connectResponse.StaleAccessToken && len( conf.Client.AccessTokenFile ) > 0 {														// When the Access-Token is stale and when it is kept saved refresh it
 			go func() {
@@ -184,49 +190,54 @@ func connect( conf *configuration.Configuration ) {
 					fmt.Println( "Main: Updating the Access-Token in", conf.Client.AccessTokenUpdateDelay )
 					time.Sleep( conf.Client.AccessTokenUpdateDelay )
 				}
-				if tokenErr := client.GetAccessToken(); tokenErr != nil { fmt.Println( "Main: [ERR] Access-Token update failed,", tokenErr ); return }
+				if tokenErr := client.GetAccessToken( upCtx ); tokenErr != nil { fmt.Println( "Main: [ERR] Access-Token update failed,", tokenErr ); return }
 				fmt.Println( "Main: Access-Token updated" )
 			} ()
 		}
 		
-		if supported, notificationErr := daemon.SdNotify( false, daemon.SdNotifyReady ); supported && err != nil {							// Send SystemD ready notification
+		if supported, notificationErr := daemon.SdNotify( false, daemon.SdNotifyReady ); supported && notificationErr != nil {				// Send SystemD ready notification
 			fmt.Println( "Main: [ERR] SystemD notification failed,", notificationErr )
 		}
 		
-		dpdErr := link.DPD( dpdContext )																									// Start the dead peer detection loop
-		if err = client.Disconnect( connectResponse.SessionToken ); err != nil { fmt.Println( "Main: [ERR] Disconnect POST failed,", err ) }// POST the "Disconnect" request
+		upErr = link.DPD( upCtx )																											// Start the dead peer detection loop
+		if discoErr := client.Disconnect( connectResponse.SessionToken ); discoErr != nil { fmt.Println( "Main: [ERR] Disconnect POST failed,", discoErr ) }
 		fmt.Println( "Main: Disconnected" )
 		link.Down()																															// Remove the DNS, rules, routes, addresses and the peer, must succeed
-		
-		return dpdErr
+		return
 	}
+	
+	signalChannel := make ( chan os.Signal )																								// Signal handling
+	signal.Notify( signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL )
+	go up()																																	// Start the client for the first time
 	
 	connectLoop:
 	for {
-		err = up()																															// Establish the connection
-		if err == wireguard.ErrDpdTimeout {																									// Reconnect when there's a DPD timeout
-			select {
-				case <- dpdContext.Done(): err = context.Canceled; break connectLoop
-				case <- time.After( conf.Client.ConnectTimeout ): continue connectLoop
-			}
+		select {
+			case sig := <- signalChannel:
+				fmt.Println( "Main: Terminating on", sig.String() )
+				upCancelLock.Lock(); upCancelInSignal := upCancel; upCancelLock.Unlock()
+				if upCancelInSignal != nil {																								// Client is running
+					upCancelInSignal()																										// Cancelling the DPD context results in the client's termination
+					<- upCh																													// Wait for the client to terminate
+				}
+				err = context.Canceled
+				break connectLoop
+			case err = <- upCh:
+				fmt.Println( "Main: [ERR] Connection failed due to", err )
+				switch err {
+					case rest.ErrHttpStatusBad, rest.ErrAppUpdateRequired, rest.ErrBadPin, context.Canceled: break connectLoop				// These errors are fatal
+					default:																												// Reconnect on any other error (context.DeadlineExceeded, wireguard.ErrDpdTimeout...)
+						fmt.Println( "Main: Reconnecting in", conf.Client.ReconnectWait )
+						time.AfterFunc( conf.Client.ReconnectWait, up )
+						continue
+				}
 		}
-		if err == context.DeadlineExceeded {																								// Reconnect when this session times out
-			select {
-				case <- time.After( conf.Client.ConnectTimeout ): continue connectLoop
-			}
-		}
-		break
 	}
-	if err != context.Canceled {																											// For loop exit happened because of an error
-		if conf.Link.LeakProtection {
-			fmt.Println( "Main: [ERR] Connection setup/teardown failed, traffic blocked, waiting for a termination signal" )				// The client won't exit yet because the traffic should be blocked until an operator intervenes
-			dpdContext, dpdCancel = context.WithCancel( context.Background() )
-			<- dpdContext.Done()
-		} else {
-			fmt.Println( "Main: No leak protection active, exiting immediately")
-		}
-		
+	if conf.Link.LeakProtection && err != context.Canceled {																				// Leak protection needs to be activated if the client stops for any reason other than context.Canceled
+		fmt.Println( "Main: [ERR] Connection setup/teardown failed, traffic blocked, waiting for a termination signal" )
+		<-signalChannel																														// The client won't exit yet because the traffic should be blocked until an operator intervenes
 	}
+	fmt.Println( "Main: Shutdown" )
 	daemon.SdNotify( false, daemon.SdNotifyStopping )																						// Send SystemD notification
 }
 

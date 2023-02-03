@@ -14,11 +14,7 @@ var (
 
 func ( l *Link ) DPD( ctx context.Context ) error {
 	var tickerChannel <- chan time.Time
-	if l.Config.DpdTimeout > 0 {
-		ticker := time.NewTicker( l.Config.DpdTimeout )
-		defer ticker.Stop()
-		tickerChannel = ticker.C
-	}
+	if l.Config.DpdTimeout > 0 { ticker := time.NewTicker( l.Config.DpdTimeout ); tickerChannel = ticker.C; defer ticker.Stop() }
 	doneChannel := ctx.Done()
 	lastRx := int64( 0 )
 	
