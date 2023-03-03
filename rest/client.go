@@ -51,7 +51,7 @@ type Client struct {
 	remote					*net.TCPAddr
 	
 	accessToken				[]byte
-	authorizedPins			[]string
+	authorizedPins			map[string]string
 }
 
 func NewClient( config *Config ) ( c *Client, err error ) {
@@ -91,9 +91,12 @@ func NewClient( config *Config ) ( c *Client, err error ) {
 		accessTokenBytes, acErr := ioutil.ReadFile( config.AccessTokenFile )
 		if acErr == nil { c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ) }
 	}
-	c.authorizedPins = []string{
-		"AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",					// Hide.Me Root CA
-		"CsEyDelMHMPh9qLGgeQn8sJwdUwvc+fCMhOU9Ne5PbU=",					// Hide.Me Server CA #1
+	
+	c.authorizedPins = map[string]string{
+		"Hide.Me Root CA": "AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",
+		"Hide.Me Server CA #1": "CsEyDelMHMPh9qLGgeQn8sJwdUwvc+fCMhOU9Ne5PbU=",
+		"DigiCert Global Root CA": "r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E=",
+		"DigiCert TLS RSA SHA256 2020 CA1": "RQeZkB42znUfsDIIFWIRiYEcKl7nHwNFwWCrnMMJbVc=",
 	}
 	return
 }
@@ -105,11 +108,11 @@ func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error
 	for _, chain := range verifiedChains {
 		chainLoop:
 		for _, certificate := range chain {
-			if ! certificate.IsCA { continue }
+			if !certificate.IsCA { continue }
 			sum := sha256.Sum256( certificate.RawSubjectPublicKeyInfo )
 			pin := base64.StdEncoding.EncodeToString( sum[:] )
-			for _, authorizedPin := range c.authorizedPins {
-				if pin == authorizedPin {
+			for name, authorizedPin := range c.authorizedPins {
+				if certificate.Subject.CommonName == name && pin == authorizedPin {
 					fmt.Println( "Pins:", certificate.Subject.CommonName, "pin OK" )
 					continue chainLoop
 				}
