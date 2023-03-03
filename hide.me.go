@@ -31,6 +31,13 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.String( "P",  conf.Client.Password, "hide.me `password`" )
 	flag.String( "d",  conf.Client.DnsServers, "comma separated list of `DNS servers` used for client requests" )
 	
+	flag.Bool	 ( "ads",        conf.Client.Filter.Ads, "block ads" )																		// Filtering related flags
+	flag.Bool	 ( "trackers",   conf.Client.Filter.Trackers, "block trackers" )
+	flag.Bool	 ( "malicious",  conf.Client.Filter.Malicious, "block malicious destinations" )
+	flag.Int	 ( "pg",         conf.Client.Filter.PG, "apply a parental guidance style filter ( 12, 18 )" )
+	flag.Bool	 ( "safeSearch", conf.Client.Filter.SafeSearch, "force safe search with search engines" )
+	flag.String  ( "categories", conf.Client.Filter.Categories, "comma separated list of content categories" )
+	
 	flag.String  ( "i",   conf.Link.Name, "network `interface` name" )																		// Link related flags
 	flag.Int     ( "l",   conf.Link.ListenPort, "listen `port`" )
 	flag.Int     ( "m",   conf.Link.FirewallMark, "firewall `mark` for wireguard and hide.me client originated traffic" )
@@ -73,25 +80,32 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.Visit( func( f *flag.Flag ) {																										// Parse flags
 		if err != nil { return }
 		switch f.Name {
-			case "p": conf.Client.Port, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: Port malformed" ) }		// REST related flags
+			case "p":  conf.Client.Port, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: Port malformed" ) }	// REST related flags
 			case "ca": conf.Client.CA = f.Value.String()
-			case "t": conf.Client.AccessTokenFile = f.Value.String()
-			case "u": conf.Client.Username = f.Value.String()
-			case "P": conf.Client.Password = f.Value.String()
-			case "d": conf.Client.DnsServers = f.Value.String()
+			case "t":  conf.Client.AccessTokenFile = f.Value.String()
+			case "u":  conf.Client.Username = f.Value.String()
+			case "P":  conf.Client.Password = f.Value.String()
+			case "d":  conf.Client.DnsServers = f.Value.String()
 		
-			case "i": conf.Link.Name = f.Value.String()																						// Link related flags
-			case "l": conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }
-			case "m": conf.Link.FirewallMark, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: FirewallMark malformed" ) }
-					  conf.Client.FirewallMark = conf.Link.FirewallMark
-			case "R": conf.Link.RPDBPriority, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: RPDBPriority malformed" ) }
-			case "r": conf.Link.RoutingTable, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: RoutingTable malformed" ) }
-			case "k": if f.Value.String() == "false" { conf.Link.LeakProtection = false }
-			case "b": conf.Link.ResolvConfBackupFile = f.Value.String()
+			case "ads":        conf.Client.Filter.Ads = f.Value.String() == "true"															// Filtering related flags
+			case "trackers":   conf.Client.Filter.Trackers = f.Value.String() == "true"
+			case "malicious":  conf.Client.Filter.Malicious = f.Value.String() == "true"
+			case "pg":         conf.Client.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: PG malformed" ) }
+			case "safeSearch": conf.Client.Filter.SafeSearch = f.Value.String() == "true"
+			case "categories": conf.Client.Filter.Categories = f.Value.String()
+		
+			case "i":   conf.Link.Name = f.Value.String()																					// Link related flags
+			case "l":   conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }
+			case "m":   conf.Link.FirewallMark, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: FirewallMark malformed" ) }
+					    conf.Client.FirewallMark = conf.Link.FirewallMark
+			case "R":   conf.Link.RPDBPriority, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: RPDBPriority malformed" ) }
+			case "r":   conf.Link.RoutingTable, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: RoutingTable malformed" ) }
+			case "k":   if f.Value.String() == "false" { conf.Link.LeakProtection = false }
+			case "b":   conf.Link.ResolvConfBackupFile = f.Value.String()
 			case "dpd": conf.Link.DpdTimeout, err = time.ParseDuration( f.Value.String() ); if err != nil { fmt.Println( "conf: DpdTimeout malformed" ) }
-			case "s": conf.Link.SplitTunnel = f.Value.String()
-			case "4": if f.Value.String() == "true" { conf.Link.IPv4 = true; conf.Link.IPv6 = false }
-			case "6": if f.Value.String() == "true" { conf.Link.IPv4 = false; conf.Link.IPv6 = true }
+			case "s":   conf.Link.SplitTunnel = f.Value.String()
+			case "4":   if f.Value.String() == "true" { conf.Link.IPv4 = true; conf.Link.IPv6 = false }
+			case "6":   if f.Value.String() == "true" { conf.Link.IPv4 = false; conf.Link.IPv6 = true }
 		}
 	})
 	if err != nil { return nil, "" }
@@ -197,6 +211,13 @@ func connect( conf *configuration.Configuration ) {
 		
 		if supported, notificationErr := daemon.SdNotify( false, daemon.SdNotifyReady ); supported && notificationErr != nil {				// Send SystemD ready notification
 			fmt.Println( "Main: [ERR] SystemD notification failed,", notificationErr )
+		}
+		
+		if !conf.Client.Filter.Empty() {																									// Apply filters
+			switch filterErr := client.ApplyFilter(); filterErr {
+				case nil: fmt.Println( "Main: Filters (", conf.Client.Filter.String(),") applied" )
+				default: fmt.Println( "[ERR] Main: Filters (", conf.Client.Filter.String(), ") have not been applied,", filterErr )
+			}
 		}
 		
 		upErr = link.DPD( upCtx )																											// Start the dead peer detection loop
