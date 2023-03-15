@@ -25,18 +25,19 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	configurationFileName := flag.String( "c", "", "Configuration `filename`" )																// General flags
 	
 	flag.Int   ( "p",  conf.Client.Port, "remote `port`" )																					// REST related flags
-	flag.String( "ca", conf.Client.CA, "CA certificate bundle" )
-	flag.String( "t",  conf.Client.AccessTokenFile, "access token filename" )
+	flag.String( "ca", conf.Client.CA, "CA certificate bundle `filename`" )
+	flag.String( "t",  conf.Client.AccessTokenFile, "access token `filename`" )
 	flag.String( "u",  conf.Client.Username, "hide.me `username`" )
 	flag.String( "P",  conf.Client.Password, "hide.me `password`" )
 	flag.String( "d",  conf.Client.DnsServers, "comma separated list of `DNS servers` used for client requests" )
 	
-	flag.Bool	 ( "ads",        conf.Client.Filter.Ads, "block ads" )																		// Filtering related flags
-	flag.Bool	 ( "trackers",   conf.Client.Filter.Trackers, "block trackers" )
-	flag.Bool	 ( "malicious",  conf.Client.Filter.Malicious, "block malicious destinations" )
-	flag.Int	 ( "pg",         conf.Client.Filter.PG, "apply a parental guidance style filter ( 12, 18 )" )
-	flag.Bool	 ( "safeSearch", conf.Client.Filter.SafeSearch, "force safe search with search engines" )
-	flag.String  ( "categories", conf.Client.Filter.Categories, "comma separated list of content categories" )
+	flag.Bool	 ( "filterAds",        conf.Client.Filter.Ads, "filter ads" )																// Filtering related flags
+	flag.Bool	 ( "filterTrackers",   conf.Client.Filter.Trackers, "filter trackers" )
+	flag.Bool	 ( "filterMalware",    conf.Client.Filter.Malware, "filter malware" )
+	flag.Bool	 ( "filterMalicious",  conf.Client.Filter.Malicious, "filter malicious destinations" )
+	flag.Int	 ( "filterPg",         conf.Client.Filter.PG, "apply a parental guidance style `age` filter ( 12, 18 )" )
+	flag.Bool	 ( "forceSafeSearch",  conf.Client.Filter.SafeSearch, "force safe search with search engines" )
+	flag.String  ( "filterCategories", "", "comma separated list of filtered content `categories`" )
 	
 	flag.String  ( "i",   conf.Link.Name, "network `interface` name" )																		// Link related flags
 	flag.Int     ( "l",   conf.Link.ListenPort, "listen `port`" )
@@ -45,7 +46,7 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.Int     ( "R",   conf.Link.RPDBPriority, "RPDB rule `priority`" )
 	flag.Bool	 ( "k",   conf.Link.LeakProtection, "enable/disable leak protection a.k.a. kill-switch" )
 	flag.String  ( "b",   conf.Link.ResolvConfBackupFile, "resolv.conf backup `filename`" )
-	flag.Duration( "dpd", conf.Link.DpdTimeout, "DPD timeout" )
+	flag.Duration( "dpd", conf.Link.DpdTimeout, "DPD `timeout`" )
 	flag.String  ( "s",   conf.Link.SplitTunnel, "comma separated list of `networks` (CIDRs) for which to bypass the VPN" )
 	flag.Bool	 ( "4",   false, "Use IPv4 tunneling only" )
 	flag.Bool	 ( "6",   false, "Use IPv6 tunneling only" )
@@ -87,12 +88,13 @@ func configure() ( conf *configuration.Configuration, command string ) {
 			case "P":  conf.Client.Password = f.Value.String()
 			case "d":  conf.Client.DnsServers = f.Value.String()
 		
-			case "ads":        conf.Client.Filter.Ads = f.Value.String() == "true"															// Filtering related flags
-			case "trackers":   conf.Client.Filter.Trackers = f.Value.String() == "true"
-			case "malicious":  conf.Client.Filter.Malicious = f.Value.String() == "true"
-			case "pg":         conf.Client.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: PG malformed" ) }
-			case "safeSearch": conf.Client.Filter.SafeSearch = f.Value.String() == "true"
-			case "categories": conf.Client.Filter.Categories = f.Value.String()
+			case "filterAds":        conf.Client.Filter.Ads = f.Value.String() == "true"															// Filtering related flags
+			case "filterTrackers":   conf.Client.Filter.Trackers = f.Value.String() == "true"
+			case "filterMalware":    conf.Client.Filter.Malware = f.Value.String() == "true"
+			case "filterMalicious":  conf.Client.Filter.Malicious = f.Value.String() == "true"
+			case "filterPg":         conf.Client.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: PG malformed" ) }
+			case "forceSafeSearch":  conf.Client.Filter.SafeSearch = f.Value.String() == "true"
+			case "filterCategories": conf.Client.Filter.Categories = strings.Split( f.Value.String(), "," )
 		
 			case "i":   conf.Link.Name = f.Value.String()																					// Link related flags
 			case "l":   conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }

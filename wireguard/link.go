@@ -92,10 +92,10 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 // Down removes the wireguard peer and un-routes it
 func ( l *Link ) Down() {
 	if rxBytes, txBytes, err := l.Acct(); err == nil { fmt.Println( "Link: Received", rxBytes, "bytes, transmitted", txBytes, "bytes" ) }
-	if ( l.state & LinkDnsSet ) > 0  { l.dnsRestore() }
-	if ( l.state & LinkRoutesSet) > 0 { l.ipRoutesRemove() }
-	if ( l.state & LinkAddrsSet ) > 0 { l.ipAddrsFlush() }
-	if ( l.state & LinkPeerSet ) > 0 { l.wgRemovePeer() }
+	if ( l.state & LinkDnsSet ) > 0  { l.dnsRestore(); l.state &= ^uint32( LinkDnsSet ) }
+	if ( l.state & LinkRoutesSet) > 0 { l.ipRoutesRemove(); l.state &= ^uint32( LinkRoutesSet ) }
+	if ( l.state & LinkAddrsSet ) > 0 { l.ipAddrsFlush(); l.state &= ^uint32( LinkAddrsSet ) }
+	if ( l.state & LinkPeerSet ) > 0 { l.wgRemovePeer(); l.state &= ^uint32( LinkPeerSet ) }
 	fmt.Println( "Link: Down" )
 	return
 }

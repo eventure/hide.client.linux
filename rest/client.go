@@ -127,7 +127,7 @@ func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error
 	return nil
 }
 
-// Custom dialContext to set the socket mark on sockets
+// Custom dialContext to set the socket mark on sockets or dial DNS servers
 func ( c *Client ) dialContext( ctx context.Context, network, addr string ) ( net.Conn, error ) {
 	dialer := &net.Dialer{}
 	if c.Config.FirewallMark > 0 {
@@ -239,10 +239,8 @@ func ( c *Client ) GetAccessToken( ctx context.Context ) ( err error ) {
 }
 
 func ( c *Client ) ApplyFilter() ( err error ) {
-	request := c.Config.Filter.ToRequest()
-	if err = request.Check(); err != nil { return }
-	
-	response, err := c.postJson( context.Background(), "https://vpn.hide.me:4321/filter", request )
+	if err = c.Config.Filter.Check(); err != nil { return }
+	response, err := c.postJson( context.Background(), "https://vpn.hide.me:4321/filter", c.Config.Filter )
 	if string(response) == "false" { err = errors.New( "filter failed" ) }
 	return
 }
