@@ -58,7 +58,8 @@ func configure() ( conf *configuration.Configuration, command string ) {
 		fmt.Fprint( os.Stderr, "command:\n" )
 		fmt.Fprint( os.Stderr, "  token - request an Access-Token (required for connect)\n" )
 		fmt.Fprint( os.Stderr, "  connect - connect to a vpn server\n" )
-		fmt.Fprint( os.Stderr, "  conf - generate a configuration file to be used with the -c option\n\n" )
+		fmt.Fprint( os.Stderr, "  conf - generate a configuration file to be used with the -c option\n" )
+		fmt.Fprint( os.Stderr, "  categories - fetch and dump filtering category list\n\n" )
 		fmt.Fprint( os.Stderr, "host:\n" )
 		fmt.Fprint( os.Stderr, "  fqdn, short name or an IP address of a hide.me server\n" )
 		fmt.Fprint( os.Stderr, "  Required when the configuration file does not contain it\n\n" )
@@ -68,7 +69,7 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.Parse()
 	
 	switch command = strings.ToLower( flag.Arg(0) ); command {
-		case "connect", "token", "conf": break
+		case "connect", "token", "conf", "categories": break
 		default:
 			if len( command ) > 0 { fmt.Fprint( os.Stderr, "Unsupported command \"" + command + "\"\n\n" ) }
 			flag.Usage()
@@ -135,6 +136,20 @@ func accessToken( conf *configuration.Configuration ) {
 	if err = client.Resolve( tokenCtx ); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }								// Resolve the REST endpoint
 	if err = client.GetAccessToken( tokenCtx ); err != nil { fmt.Println( "Main: [ERR] Access-Token request failed,", err ); return }		// Request an Access-Token
 	fmt.Println( "Main: Access-Token stored in", conf.Client.AccessTokenFile )
+	return
+}
+
+// Fetch and dump filtering categories
+func categories( conf *configuration.Configuration ) {
+	clientConf := conf.Client
+	clientConf.Port = 443
+	clientConf.CA = ""
+	client, err := rest.NewClient( &clientConf )																							// Create the REST client
+	if err != nil { fmt.Println( "Main: [ERR] REST Client setup failed,", err ); return }
+	catCtx, cancel := context.WithTimeout( context.Background(), conf.Client.RestTimeout )
+	defer cancel()
+	if err = client.Resolve( catCtx ); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }									// Resolve the REST endpoint
+	if err = client.FetchCategoryList( catCtx ); err != nil { fmt.Println( "Main: [ERR] GET request failed,", err ); return }				// Get JSON
 	return
 }
 
@@ -276,5 +291,6 @@ func main() {
 		case "conf": conf.Print()																											// Configuration dump
 		case "token": accessToken( conf )																									// Access-Token
 		case "connect": connect( conf )																										// Connect to the server
+		case "categories": categories( conf )																								// Fetch the filtering categories JSON
 	}
 }

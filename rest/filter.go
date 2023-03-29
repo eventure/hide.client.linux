@@ -36,7 +36,7 @@ func (f *Filter) String() ( pretty string ) {
 	if f.Malicious			{ pretty += ", malicious" }
 	if len(f.Risk) > 0		{ pretty += ", " + f.Risk + " risk" }
 	if len(f.Illegal) > 0	{ pretty += ", " + f.Illegal }
-	if len(f.Categories) > 0 { pretty += "; " + strings.Join( f.Categories, "," ) }
+	if len(f.Categories) > 0 { pretty += ", categories=" + strings.Join( f.Categories, "," ) }
 	pretty = strings.TrimPrefix( pretty, ", " )
 	return
 }

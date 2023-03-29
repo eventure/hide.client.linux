@@ -151,11 +151,24 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 	request, err := http.NewRequestWithContext( connectCtx, "POST", url, bytes.NewReader( body ) )
 	if err != nil { return }
 	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.3")
-	request.Header.Add( "content-type", "application/json")
+	request.Header.Add( "content-type", "application/json" )
 	response, err := c.client.Do( request )
 	if err != nil { return }
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusForbidden { fmt.Println( "Rest: [ERR] Application update required" ); return nil, ErrAppUpdateRequired }
+	if response.StatusCode != http.StatusOK { fmt.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
+	return io.ReadAll( response.Body )
+}
+
+func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte, err error ) {
+	getCtx, cancel := context.WithTimeout( ctx, c.Config.RestTimeout )
+	defer cancel()
+	request, err := http.NewRequestWithContext( getCtx, "GET", url, nil )
+	if err != nil { return }
+	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.3")
+	response, err := c.client.Do( request )
+	if err != nil { return }
+	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK { fmt.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
 	return io.ReadAll( response.Body )
 }
@@ -166,7 +179,7 @@ func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return tru
 func ( c *Client ) Resolve( ctx context.Context ) ( err error ) {
 	if ip := net.ParseIP( c.Config.Host ); ip != nil {											// c.Host is an IP address, allow that
 		c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }									// Set remote endpoint to that IP
-		c.transport.TLSClientConfig.ServerName = "hideservers.net"								// any.hideservers.net is always a certificate SAN
+		c.transport.TLSClientConfig.ServerName = "hideservers.net"								// hideservers.net is always a certificate SAN
 		return
 	}
 	lookupCtx, cancel := context.WithTimeout( ctx, time.Second * 5 )
@@ -242,5 +255,22 @@ func ( c *Client ) ApplyFilter() ( err error ) {
 	if err = c.Config.Filter.Check(); err != nil { return }
 	response, err := c.postJson( context.Background(), "https://vpn.hide.me:4321/filter", c.Config.Filter )
 	if string(response) == "false" { err = errors.New( "filter failed" ) }
+	return
+}
+
+func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
+	response, err := c.get( ctx, "https://" + c.remote.String() + "/categorization/categories.json" )
+	if err != nil { return }
+	
+	type Category struct {
+		Name		string
+		Description	string
+	}
+	cats := []Category{}
+	if err = json.Unmarshal( response, &cats ); err != nil { return }
+	
+	fmt.Printf( "%40s | %s\n", "CATEGORY", "DESCRIPTION" )
+	fmt.Printf( "%40s | %s\n", "--------", "-----------" )
+	for _, cat := range cats { fmt.Printf( "%40s | %s\n", cat.Name, cat.Description ) }
 	return
 }
