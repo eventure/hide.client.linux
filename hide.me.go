@@ -31,13 +31,15 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.String( "P",  conf.Client.Password, "hide.me `password`" )
 	flag.String( "d",  conf.Client.DnsServers, "comma separated list of `DNS servers` used for client requests" )
 	
-	flag.Bool	 ( "filterAds",        conf.Client.Filter.Ads, "filter ads" )																// Filtering related flags
-	flag.Bool	 ( "filterTrackers",   conf.Client.Filter.Trackers, "filter trackers" )
-	flag.Bool	 ( "filterMalware",    conf.Client.Filter.Malware, "filter malware" )
-	flag.Bool	 ( "filterMalicious",  conf.Client.Filter.Malicious, "filter malicious destinations" )
-	flag.Int	 ( "filterPg",         conf.Client.Filter.PG, "apply a parental guidance style `age` filter ( 12, 18 )" )
-	flag.Bool	 ( "forceSafeSearch",  conf.Client.Filter.SafeSearch, "force safe search with search engines" )
-	flag.String  ( "filterCategories", "", "comma separated list of filtered content `categories`" )
+	flag.Bool	 ( "filterAds",			conf.Client.Filter.Ads, "filter ads" )																// Filtering related flags
+	flag.Bool	 ( "filterTrackers",	conf.Client.Filter.Trackers, "filter trackers" )
+	flag.Bool	 ( "filterMalware",		conf.Client.Filter.Malware, "filter malware" )
+	flag.Bool	 ( "filterMalicious",	conf.Client.Filter.Malicious, "filter malicious destinations" )
+	flag.Int	 ( "filterPg",			conf.Client.Filter.PG, "apply a parental guidance style `age` filter (12, 18)" )
+	flag.Bool	 ( "forceSafeSearch",	conf.Client.Filter.SafeSearch, "force safe search with search engines" )
+	flag.String  ( "filterRisk",		conf.Client.Filter.Risk, "filter content according to risk `level` (possible, medium, high)" )
+	flag.String  ( "filterIllegal",		conf.Client.Filter.Illegal, "filter illegal `kind` (content, warez, spyware, copyright)" )
+	flag.String  ( "filterCategories",	"", "comma separated list of filtered content `categories`" )
 	
 	flag.String  ( "i",   conf.Link.Name, "network `interface` name" )																		// Link related flags
 	flag.Int     ( "l",   conf.Link.ListenPort, "listen `port`" )
@@ -95,6 +97,8 @@ func configure() ( conf *configuration.Configuration, command string ) {
 			case "filterPg":         conf.Client.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: PG malformed" ) }
 			case "forceSafeSearch":  conf.Client.Filter.SafeSearch = f.Value.String() == "true"
 			case "filterCategories": conf.Client.Filter.Categories = strings.Split( f.Value.String(), "," )
+			case "filterRisk":		 conf.Client.Filter.Risk = f.Value.String()
+			case "filterIllegal":	 conf.Client.Filter.Illegal = f.Value.String()
 		
 			case "i":   conf.Link.Name = f.Value.String()																					// Link related flags
 			case "l":   conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }
