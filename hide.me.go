@@ -40,6 +40,8 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.String  ( "noRisk",		strings.Join( conf.Client.Filter.Risk, "," ), "filter content according to risk `level` (possible, medium, high)" )
 	flag.String  ( "noIllegal",		strings.Join( conf.Client.Filter.Illegal, "," ), "filter illegal `kind` (content, warez, spyware, copyright)" )
 	flag.String  ( "noCategories",	strings.Join( conf.Client.Filter.Categories, "," ), "comma separated list of filtered content `categories`" )
+	flag.String  ( "whitelist",		strings.Join( conf.Client.Filter.Categories, "," ), "comma separated list of allowed `dns names`" )
+	flag.String  ( "blacklist",		strings.Join( conf.Client.Filter.Categories, "," ), "comma separated list of filtered `dns names`" )
 	
 	flag.String  ( "i",   conf.Link.Name, "network `interface` name" )																		// Link related flags
 	flag.Int     ( "l",   conf.Link.ListenPort, "listen `port`" )
@@ -100,6 +102,8 @@ func configure() ( conf *configuration.Configuration, command string ) {
 			case "noRisk":		 conf.Client.Filter.Risk = strings.Split( f.Value.String(), "," )
 			case "noIllegal":	 conf.Client.Filter.Illegal = strings.Split( f.Value.String(), "," )
 			case "noCategories": conf.Client.Filter.Categories = strings.Split( f.Value.String(), "," )
+			case "whitelist":	 conf.Client.Filter.Whitelist = strings.Split( f.Value.String(), "," )
+			case "blacklist":	 conf.Client.Filter.Blacklist = strings.Split( f.Value.String(), "," )
 		
 			case "i":   conf.Link.Name = f.Value.String()																					// Link related flags
 			case "l":   conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }
