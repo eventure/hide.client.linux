@@ -31,15 +31,15 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.String( "P",  conf.Client.Password, "hide.me `password`" )
 	flag.String( "d",  conf.Client.DnsServers, "comma separated list of `DNS servers` used for client requests" )
 	
-	flag.Bool	 ( "filterAds",			conf.Client.Filter.Ads, "filter ads" )																// Filtering related flags
-	flag.Bool	 ( "filterTrackers",	conf.Client.Filter.Trackers, "filter trackers" )
-	flag.Bool	 ( "filterMalware",		conf.Client.Filter.Malware, "filter malware" )
-	flag.Bool	 ( "filterMalicious",	conf.Client.Filter.Malicious, "filter malicious destinations" )
-	flag.Int	 ( "filterPg",			conf.Client.Filter.PG, "apply a parental guidance style `age` filter (12, 18)" )
-	flag.Bool	 ( "forceSafeSearch",	conf.Client.Filter.SafeSearch, "force safe search with search engines" )
-	flag.String  ( "filterRisk",		conf.Client.Filter.Risk, "filter content according to risk `level` (possible, medium, high)" )
-	flag.String  ( "filterIllegal",		conf.Client.Filter.Illegal, "filter illegal `kind` (content, warez, spyware, copyright)" )
-	flag.String  ( "filterCategories",	"", "comma separated list of filtered content `categories`" )
+	flag.Bool	 ( "noAds",			conf.Client.Filter.Ads, "filter ads" )																// Filtering related flags
+	flag.Bool	 ( "noTrackers",	conf.Client.Filter.Trackers, "filter trackers" )
+	flag.Bool	 ( "noMalware",		conf.Client.Filter.Malware, "filter malware" )
+	flag.Bool	 ( "noMalicious",	conf.Client.Filter.Malicious, "filter malicious destinations" )
+	flag.Int	 ( "pg",			conf.Client.Filter.PG, "apply a parental guidance style `age` filter (12, 18)" )
+	flag.Bool	 ( "safeSearch",	conf.Client.Filter.SafeSearch, "force safe search with search engines" )
+	flag.String  ( "noRisk",		strings.Join( conf.Client.Filter.Risk, "," ), "filter content according to risk `level` (possible, medium, high)" )
+	flag.String  ( "noIllegal",		strings.Join( conf.Client.Filter.Illegal, "," ), "filter illegal `kind` (content, warez, spyware, copyright)" )
+	flag.String  ( "noCategories",	strings.Join( conf.Client.Filter.Categories, "," ), "comma separated list of filtered content `categories`" )
 	
 	flag.String  ( "i",   conf.Link.Name, "network `interface` name" )																		// Link related flags
 	flag.Int     ( "l",   conf.Link.ListenPort, "listen `port`" )
@@ -91,15 +91,15 @@ func configure() ( conf *configuration.Configuration, command string ) {
 			case "P":  conf.Client.Password = f.Value.String()
 			case "d":  conf.Client.DnsServers = f.Value.String()
 		
-			case "filterAds":        conf.Client.Filter.Ads = f.Value.String() == "true"															// Filtering related flags
-			case "filterTrackers":   conf.Client.Filter.Trackers = f.Value.String() == "true"
-			case "filterMalware":    conf.Client.Filter.Malware = f.Value.String() == "true"
-			case "filterMalicious":  conf.Client.Filter.Malicious = f.Value.String() == "true"
-			case "filterPg":         conf.Client.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: PG malformed" ) }
-			case "forceSafeSearch":  conf.Client.Filter.SafeSearch = f.Value.String() == "true"
-			case "filterCategories": conf.Client.Filter.Categories = strings.Split( f.Value.String(), "," )
-			case "filterRisk":		 conf.Client.Filter.Risk = f.Value.String()
-			case "filterIllegal":	 conf.Client.Filter.Illegal = f.Value.String()
+			case "noAds":        conf.Client.Filter.Ads = f.Value.String() == "true"															// Filtering related flags
+			case "noTrackers":   conf.Client.Filter.Trackers = f.Value.String() == "true"
+			case "noMalware":    conf.Client.Filter.Malware = f.Value.String() == "true"
+			case "noMalicious":  conf.Client.Filter.Malicious = f.Value.String() == "true"
+			case "pg":        	 conf.Client.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: PG malformed" ) }
+			case "safeSearch":	 conf.Client.Filter.SafeSearch = f.Value.String() == "true"
+			case "noRisk":		 conf.Client.Filter.Risk = strings.Split( f.Value.String(), "," )
+			case "noIllegal":	 conf.Client.Filter.Illegal = strings.Split( f.Value.String(), "," )
+			case "noCategories": conf.Client.Filter.Categories = strings.Split( f.Value.String(), "," )
 		
 			case "i":   conf.Link.Name = f.Value.String()																					// Link related flags
 			case "l":   conf.Link.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { fmt.Println( "conf: ListenPort malformed" ) }

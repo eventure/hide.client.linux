@@ -13,8 +13,8 @@ type Filter struct {
 	SafeSearch	bool		`yaml:"safeSearch,omitempty" json:"safeSearch,omitempty"`
 	PG			int			`yaml:"PG,omitempty" json:"PG,omitempty"`
 	Malicious	bool		`yaml:"malicious,omitempty" json:"malicious,omitempty"`
-	Risk		string		`yaml:"risk,omitempty" json:"risk,omitempty"`
-	Illegal		string		`yaml:"illegal,omitempty" json:"illegal,omitempty"`
+	Risk		[]string	`yaml:"risk,omitempty" json:"risk,omitempty"`
+	Illegal		[]string	`yaml:"illegal,omitempty" json:"illegal,omitempty"`
 	Categories	[]string	`yaml:"categories,omitempty" json:"categories,omitempty"`
 }
 
@@ -28,14 +28,14 @@ func (f *Filter) Empty() bool {
 }
 
 func (f *Filter) String() ( pretty string ) {
-	if f.Ads				{ pretty += ", ads" }
-	if f.Trackers			{ pretty += ", trackers" }
-	if f.Malware			{ pretty += ", malware" }
-	if f.SafeSearch			{ pretty += ", safe search" }
-	if f.PG > 0				{ pretty += ", pg-" + strconv.Itoa( f.PG ) }
-	if f.Malicious			{ pretty += ", malicious" }
-	if len(f.Risk) > 0		{ pretty += ", " + f.Risk + " risk" }
-	if len(f.Illegal) > 0	{ pretty += ", " + f.Illegal }
+	if f.Ads				 { pretty += ", ads" }
+	if f.Trackers			 { pretty += ", trackers" }
+	if f.Malware			 { pretty += ", malware" }
+	if f.SafeSearch			 { pretty += ", safe search" }
+	if f.PG > 0				 { pretty += ", pg-" + strconv.Itoa( f.PG ) }
+	if f.Malicious			 { pretty += ", malicious" }
+	if len(f.Risk) > 0		 { pretty += ", risk=" + strings.Join( f.Risk, "," ) }
+	if len(f.Illegal) > 0	 { pretty += ", illegal=" + strings.Join( f.Illegal, "," ) }
 	if len(f.Categories) > 0 { pretty += ", categories=" + strings.Join( f.Categories, "," ) }
 	pretty = strings.TrimPrefix( pretty, ", " )
 	return
@@ -46,13 +46,19 @@ func (f *Filter) Check() error {
 		case 0, 12, 18, 21: break
 		default: return errors.New( "unsupported PG" )
 	}
-	switch f.Risk {
-		case "", "possible", "medium", "high": break
-		default: return errors.New( "unsupported risk level " + f.Risk )
+	for _, risk := range f.Risk {
+		switch risk {
+			case "", "possible", "medium", "high": break
+			default: return errors.New( "unsupported risk level " + risk )
+		}
 	}
-	switch f.Illegal {
-		case "", "content", "warez", "spyware", "copyright": break
-		default: return errors.New( "bad illegal category " + f.Illegal )
+	
+	for _, illegal := range f.Illegal {
+		switch illegal {
+			case "", "content", "warez", "spyware", "copyright": break
+			default: return errors.New( "bad illegal category " + illegal )
+		}
 	}
+	
 	return nil
 }
