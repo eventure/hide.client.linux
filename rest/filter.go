@@ -10,6 +10,7 @@ import (
 var nameRegexp = regexp.MustCompile( `^([[:word:]]|\x2E|\x2D|\x2A)+$` )									// [0-9A-Za-z_] | "." | "-" | "*"
 
 type Filter struct {
+	ForceDns	bool		`yaml:"forceDns,omitempty" json:"forceDns,omitempty"`
 	Ads			bool		`yaml:"ads,omitempty" json:"ads,omitempty"`
 	Trackers	bool		`yaml:"trackers,omitempty" json:"trackers,omitempty"`
 	Malware		bool		`yaml:"malware,omitempty" json:"malware,omitempty"`
@@ -24,7 +25,7 @@ type Filter struct {
 }
 
 func (f *Filter) Empty() bool {
-	if f.Ads || f.Trackers || f.Malware || f.Malicious || f.SafeSearch { return false }
+	if f.ForceDns || f.Ads || f.Trackers || f.Malware || f.Malicious || f.SafeSearch { return false }
 	if f.PG > 0 { return false }
 	if len(f.Categories) > 0 { return false }
 	if len(f.Risk) > 0 { return false }
@@ -35,6 +36,7 @@ func (f *Filter) Empty() bool {
 }
 
 func (f *Filter) String() ( pretty string ) {
+	if f.ForceDns			 { pretty += ", forceDns" }
 	if f.Ads				 { pretty += ", ads" }
 	if f.Trackers			 { pretty += ", trackers" }
 	if f.Malware			 { pretty += ", malware" }

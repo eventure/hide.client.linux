@@ -31,7 +31,8 @@ func configure() ( conf *configuration.Configuration, command string ) {
 	flag.String( "P",  conf.Client.Password, "hide.me `password`" )
 	flag.String( "d",  conf.Client.DnsServers, "comma separated list of `DNS servers` used for client requests" )
 	
-	flag.Bool	 ( "noAds",			conf.Client.Filter.Ads, "filter ads" )																// Filtering related flags
+	flag.Bool	 ( "forceDns",		conf.Client.Filter.ForceDns, "force tunneled DNS handling on hide.me servers" )							// Filtering related flags
+	flag.Bool	 ( "noAds",			conf.Client.Filter.Ads, "filter ads" )
 	flag.Bool	 ( "noTrackers",	conf.Client.Filter.Trackers, "filter trackers" )
 	flag.Bool	 ( "noMalware",		conf.Client.Filter.Malware, "filter malware" )
 	flag.Bool	 ( "noMalicious",	conf.Client.Filter.Malicious, "filter malicious destinations" )
@@ -93,7 +94,8 @@ func configure() ( conf *configuration.Configuration, command string ) {
 			case "P":  conf.Client.Password = f.Value.String()
 			case "d":  conf.Client.DnsServers = f.Value.String()
 		
-			case "noAds":        conf.Client.Filter.Ads = f.Value.String() == "true"															// Filtering related flags
+			case "forceDns":     conf.Client.Filter.ForceDns = f.Value.String() == "true"													// Filtering related flags
+			case "noAds":        conf.Client.Filter.Ads = f.Value.String() == "true"
 			case "noTrackers":   conf.Client.Filter.Trackers = f.Value.String() == "true"
 			case "noMalware":    conf.Client.Filter.Malware = f.Value.String() == "true"
 			case "noMalicious":  conf.Client.Filter.Malicious = f.Value.String() == "true"
