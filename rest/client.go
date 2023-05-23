@@ -92,7 +92,10 @@ func NewClient( config *Config ) ( c *Client, err error ) {
 	} else { c.dnsServers = append( c.dnsServers, "1.1.1.1:53" ) }
 	if len( config.AccessTokenFile ) > 0 {
 		accessTokenBytes, acErr := ioutil.ReadFile( config.AccessTokenFile )
-		if acErr == nil { c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ) }
+		if acErr == nil {
+			c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) )
+			c.Config.Filter.AccessToken = c.accessToken
+		}
 	}
 	
 	c.authorizedPins = map[string]string{

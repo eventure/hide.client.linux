@@ -10,6 +10,7 @@ import (
 var nameRegexp = regexp.MustCompile( `^([[:word:]]|\x2E|\x2D|\x2A)+$` )									// [0-9A-Za-z_] | "." | "-" | "*"
 
 type Filter struct {
+	AccessToken	[]byte		`yaml:"accessToken,omitempty" json:"accessToken,omitempty"`
 	ForceDns	bool		`yaml:"forceDns,omitempty" json:"forceDns,omitempty"`
 	Ads			bool		`yaml:"ads,omitempty" json:"ads,omitempty"`
 	Trackers	bool		`yaml:"trackers,omitempty" json:"trackers,omitempty"`
