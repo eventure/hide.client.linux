@@ -50,6 +50,8 @@ type Link struct {
 	rule			*netlink.Rule																															// Use just one rule when diverting traffic to our routing table
 	rule6			*netlink.Rule
 	
+	resolvConf		[]byte																																	// resolv.conf backup
+	
 	state			uint32
 }
 

@@ -30,7 +30,7 @@ func NewConfiguration() *Configuration {
 			RoutingTable:			55555,										// command line option "-r"
 			RPDBPriority:			10,											// command line option "-R"
 			LeakProtection:			true,										// command line option "-k"
-			ResolvConfBackupFile:	"/etc/resolv.conf.backup.hide.me",			// command line option "-b"
+			ResolvConfBackupFile:	"",											// command line option "-b"
 			DpdTimeout:				time.Minute,								// command line option "-dpd"
 			SplitTunnel:			"",											// command line option "-s"
 			IPv4:					true,										// command line options "-4" and "-6"
@@ -79,7 +79,6 @@ func ( c *Configuration ) Check() ( err error ) {
 	if len( c.Client.Host ) == 0 { err = errors.New( "missing hostname" ); return }
 	if c.Client.Port == 0 { err = errors.New( "bad remote port " + strconv.Itoa( c.Client.Port ) ); return }
 	if len( c.Link.Name ) == 0 { err = errors.New( "missing wireGuard interface name" ); return }
-	if len( c.Link.ResolvConfBackupFile ) == 0 { err = errors.New( "filename for a resolv.conf backup not set" ); return }
 	if c.Link.DpdTimeout == 0 { err = errors.New( "dpd timeout not set" ); return }
 	if c.Link.DpdTimeout > time.Minute { err = errors.New( "dpd timeout above 1 minute" ); return }
 	if c.Client.Port == 443 {
