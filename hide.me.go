@@ -137,10 +137,8 @@ func accessToken( conf *configuration.Configuration ) {
 	if !client.HaveAccessToken() {																											// An old Access-Token may be used to obtain a new one, although that process may be done by "connect" too
 		if err = conf.InteractiveCredentials(); err != nil { fmt.Println( "Main: [ERR] Credential error,", err ); return }					// Try to obtain the credentials through the terminal
 	}
-	tokenCtx, cancel := context.WithTimeout( context.Background(), conf.Client.RestTimeout )
-	defer cancel()
-	if err = client.Resolve( tokenCtx ); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }								// Resolve the REST endpoint
-	if err = client.GetAccessToken( tokenCtx ); err != nil { fmt.Println( "Main: [ERR] Access-Token request failed,", err ); return }		// Request an Access-Token
+	if err = client.Resolve(); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }											// Resolve the REST endpoint
+	if err = client.GetAccessToken(); err != nil { fmt.Println( "Main: [ERR] Access-Token request failed,", err ); return }					// Request an Access-Token
 	fmt.Println( "Main: Access-Token stored in", conf.Client.AccessTokenFile )
 	return
 }
@@ -152,10 +150,8 @@ func categories( conf *configuration.Configuration ) {
 	clientConf.CA = ""
 	client, err := rest.NewClient( &clientConf )																							// Create the REST client
 	if err != nil { fmt.Println( "Main: [ERR] REST Client setup failed,", err ); return }
-	catCtx, cancel := context.WithTimeout( context.Background(), conf.Client.RestTimeout )
-	defer cancel()
-	if err = client.Resolve( catCtx ); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }									// Resolve the REST endpoint
-	if err = client.FetchCategoryList( catCtx ); err != nil { fmt.Println( "Main: [ERR] GET request failed,", err ); return }				// Get JSON
+	if err = client.Resolve(); err != nil { fmt.Println( "Main: [ERR] DNS failed,", err ); return }											// Resolve the REST endpoint
+	if err = client.FetchCategoryList(); err != nil { fmt.Println( "Main: [ERR] GET request failed,", err ); return }						// Get JSON
 	return
 }
 
@@ -163,7 +159,7 @@ func categories( conf *configuration.Configuration ) {
 func connect( conf *configuration.Configuration ) {
 	client, err := rest.NewClient( &conf.Client )																							// Create the REST client
 	if err != nil { fmt.Println( "Main: [ERR] REST Client setup failed,", err ); return }
-	if ! client.HaveAccessToken() { fmt.Println( "Main: [ERR] No Access-Token available" ); return }										// Access-Token is required for the Connect/Disconnect methods
+	if !client.HaveAccessToken() { fmt.Println( "Main: [ERR] No Access-Token available" ); return }											// Access-Token is required for the Connect/Disconnect methods
 	
 	link := wireguard.NewLink( conf.Link )
 	if err = link.Open(); err != nil { fmt.Println( "Main: [ERR] Wireguard open failed,", err ); return }									// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
@@ -211,14 +207,14 @@ func connect( conf *configuration.Configuration ) {
 		defer upCancel()
 		upCancelLock.Unlock()
 		
-		if upErr = client.Resolve( upCtx ); upErr != nil { fmt.Println( "Main: [ERR] DNS failed,", upErr ); return }						// Resolve the remote address
+		if upErr = client.Resolve(); upErr != nil { fmt.Println( "Main: [ERR] DNS failed,", upErr ); return }								// Resolve the remote address
 		serverIpNet := wireguard.Ip2Net( client.Remote().IP )
 		
 		fmt.Println( "Main: Connecting to", serverIpNet.IP )																				// Add the throw route in order to reach Hide.me
 		if upErr = link.ThrowRouteAdd( "VPN server", serverIpNet ); upErr != nil { return }
 		defer link.ThrowRouteDel( "VPN server", serverIpNet )
 	
-		connectResponse, upErr := client.Connect( upCtx, link.PublicKey() )																	// Issue a REST Connect request
+		connectResponse, upErr := client.Connect( link.PublicKey() )																		// Issue a REST Connect request
 		if upErr != nil { if urlError, ok := upErr.( *url.Error ); ok { upErr = urlError.Unwrap() }; return }
 		fmt.Println( "Main: Connected to", client.Remote() )
 		connectResponse.Print()																												// Print the response attributes ( connection properties )
@@ -231,7 +227,7 @@ func connect( conf *configuration.Configuration ) {
 					fmt.Println( "Main: Updating the Access-Token in", conf.Client.AccessTokenUpdateDelay )
 					time.Sleep( conf.Client.AccessTokenUpdateDelay )
 				}
-				if tokenErr := client.GetAccessToken( upCtx ); tokenErr != nil { fmt.Println( "Main: [ERR] Access-Token update failed,", tokenErr ); return }
+				if tokenErr := client.GetAccessToken(); tokenErr != nil { fmt.Println( "Main: [ERR] Access-Token update failed,", tokenErr ); return }
 				fmt.Println( "Main: Access-Token updated" )
 			} ()
 		}

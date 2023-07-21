@@ -48,7 +48,6 @@ type Client struct {
 	*Config
 	
 	client					*http.Client
-	transport				*http.Transport
 	resolver				*net.Resolver
 	dnsServers				[]string
 	remote					*net.TCPAddr
@@ -58,46 +57,58 @@ type Client struct {
 }
 
 func NewClient( config *Config ) ( c *Client, err error ) {
+	if len( config.CA ) == 0 { return nil, errors.New( "no CA certificate" ) }
+	pem, err := os.ReadFile( config.CA )
+	if err != nil { return nil, err }
+	
 	c = &Client{ Config: config }
 	if c.Config.Port == 0 { c.Config.Port = 432 }
-	c.transport = &http.Transport{
-		DialContext:			c.dialContext,
+	
+	dialer := &net.Dialer{}																	// Use a custom dialer to set the socket mark on sockets when configured
+	if c.Config.FirewallMark > 0 {
+		dialer.Control = func( _, _ string, rawConn syscall.RawConn ) ( err error ) {
+			_ = rawConn.Control( func( fd uintptr ) {
+				err = syscall.SetsockoptInt( int(fd), unix.SOL_SOCKET, unix.SO_MARK, c.Config.FirewallMark )
+				if err != nil { fmt.Println( "Dial: [ERR] Set mark failed,", err ) }
+			})
+			return
+		}
+	}
+	c.resolver = &net.Resolver{ PreferGo: true, Dial: func(ctx context.Context, network string, addr string) ( net.Conn, error ) {
+		return dialer.DialContext( ctx, network, c.dnsServers[ rand.Intn( len( c.dnsServers ) ) ] )
+	}}
+	dialer.Resolver = c.resolver
+	
+	transport := &http.Transport{
+		DialContext: 			dialer.DialContext,
 		TLSHandshakeTimeout:	time.Second * 5,
 		DisableKeepAlives:		true,
 		ResponseHeaderTimeout:	time.Second * 5,
 		ForceAttemptHTTP2:		true,
+		TLSClientConfig: &tls.Config{
+			NextProtos:				[]string{ "h2" },
+			ServerName:				"hideservers.net",										// hideservers.net is always a certificate SAN
+			MinVersion:				tls.VersionTLS13,
+			VerifyPeerCertificate:	c.Pins,
+			RootCAs:				x509.NewCertPool(),
+		},
 	}
-	c.transport.TLSClientConfig = &tls.Config{
-		NextProtos:				[]string{ "h2" },
-		ServerName:				"",
-		MinVersion:				tls.VersionTLS13,
-		VerifyPeerCertificate:	c.Pins,
-	}
-	if len( config.CA ) > 0 {
-		pem, err := os.ReadFile( config.CA )
-		if err != nil { return nil, err }
-		c.transport.TLSClientConfig.RootCAs = x509.NewCertPool()
-		ok := c.transport.TLSClientConfig.RootCAs.AppendCertsFromPEM( pem )
-		if ! ok { return nil, errors.New( "Bad certificate in " + config.CA ) }
-	}
+	if ok := transport.TLSClientConfig.RootCAs.AppendCertsFromPEM( pem ); !ok { return nil, errors.New( "bad certificate in " + config.CA ) }
 	c.client = &http.Client{
-		Transport:	c.transport,
+		Transport:	transport,
 		Timeout:	c.Config.RestTimeout,
 	}
-	c.resolver = &net.Resolver{ PreferGo: true, Dial: c.dialContext }
 	if len( c.Config.DnsServers ) > 0 {
 		for _, dnsServer := range strings.Split( c.Config.DnsServers, "," ) {
 			c.dnsServers = append( c.dnsServers, strings.TrimSpace( dnsServer ) )
 		}
 	} else { c.dnsServers = append( c.dnsServers, "1.1.1.1:53" ) }
 	if len( config.AccessTokenFile ) > 0 {
-		accessTokenBytes, acErr := ioutil.ReadFile( config.AccessTokenFile )
-		if acErr == nil {
-			c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) )
-			c.Config.Filter.AccessToken = c.accessToken
+		switch accessTokenBytes, err := os.ReadFile( config.AccessTokenFile ); err {
+			case nil: c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ); c.Config.Filter.AccessToken = c.accessToken
+			default: return nil, err
 		}
 	}
-	
 	c.authorizedPins = map[string]string{
 		"Hide.Me Root CA": "AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",
 		"Hide.Me Server CA #1": "CsEyDelMHMPh9qLGgeQn8sJwdUwvc+fCMhOU9Ne5PbU=",
@@ -130,30 +141,12 @@ func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error
 	return nil
 }
 
-// Custom dialContext to set the socket mark on sockets or dial DNS servers
-func ( c *Client ) dialContext( ctx context.Context, network, addr string ) ( net.Conn, error ) {
-	dialer := &net.Dialer{}
-	if c.Config.FirewallMark > 0 {
-		dialer.Control = func( _, _ string, rawConn syscall.RawConn ) ( err error ) {
-			_ = rawConn.Control( func( fd uintptr ) {
-				err = syscall.SetsockoptInt( int(fd), unix.SOL_SOCKET, unix.SO_MARK, c.Config.FirewallMark )
-				if err != nil { fmt.Println( "Dial: [ERR] Set mark failed,", err ) }
-			})
-			return
-		}
-	}
-	if network == "udp" { addr = c.dnsServers[ rand.Intn( len( c.dnsServers ) ) ] }
-	return dialer.DialContext( ctx, network, addr )
-}
-
-func ( c *Client ) postJson( ctx context.Context, url string, object interface{} ) ( responseBody []byte, err error ) {
+func ( c *Client ) postJson( url string, object interface{} ) ( responseBody []byte, err error ) {
 	body, err := json.MarshalIndent( object, "", "\t" )
 	if err != nil { return }
-	connectCtx, cancel := context.WithTimeout( ctx, c.Config.RestTimeout )
-	defer cancel()
-	request, err := http.NewRequestWithContext( connectCtx, "POST", url, bytes.NewReader( body ) )
+	request, err := http.NewRequest( "POST", url, bytes.NewReader( body ) )
 	if err != nil { return }
-	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.3")
+	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.4")
 	request.Header.Add( "content-type", "application/json" )
 	response, err := c.client.Do( request )
 	if err != nil { return }
@@ -163,12 +156,10 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 	return io.ReadAll( response.Body )
 }
 
-func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte, err error ) {
-	getCtx, cancel := context.WithTimeout( ctx, c.Config.RestTimeout )
-	defer cancel()
-	request, err := http.NewRequestWithContext( getCtx, "GET", url, nil )
+func ( c *Client ) get( url string ) ( responseBody []byte, err error ) {
+	request, err := http.NewRequest( "GET", url, nil )
 	if err != nil { return }
-	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.3")
+	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.4")
 	response, err := c.client.Do( request )
 	if err != nil { return }
 	defer response.Body.Close()
@@ -179,30 +170,25 @@ func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte,
 func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return true }; return false }
 
 // Resolve resolves an IP of a Hide.me endpoint and stores that IP for further use. Hide.me balances DNS rapidly, so once an IP is acquired it needs to be used for the remainder of the session
-func ( c *Client ) Resolve( ctx context.Context ) ( err error ) {
-	if ip := net.ParseIP( c.Config.Host ); ip != nil {											// c.Host is an IP address, allow that
-		c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }									// Set remote endpoint to that IP
-		c.transport.TLSClientConfig.ServerName = "hideservers.net"								// hideservers.net is always a certificate SAN
-		return
-	}
-	lookupCtx, cancel := context.WithTimeout( ctx, time.Second * 5 )
+func ( c *Client ) Resolve() ( err error ) {
+	if ip := net.ParseIP( c.Config.Host ); ip != nil { c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }; return }		// c.Host is an IP address, set remote endpoint to that IP
+	ctx, cancel := context.WithTimeout( context.Background(), time.Second * 5 )												// Perform a DNS lookup
 	defer cancel()
-	addrs, err := c.resolver.LookupIPAddr( lookupCtx, c.Config.Host )							// If DNS fails during reconnect then the remote server address in c.remote will be reused for the reconnection attempt
-	if err != nil {																				// that's cool, but far from optimal
-		fmt.Println( "Resolve: [ERR]", c.Config.Host, "lookup failed,", err )
-		if c.remote != nil { fmt.Println( "Resolve: Using previous lookup response", c.remote.String() ); return nil }
+	addrs, err := c.resolver.LookupIPAddr( ctx, c.Config.Host )
+	if err != nil {																											// If DNS fails during reconnect then the remote server address in c.remote will be reused for the reconnection attempt
+		fmt.Println( "Name: [ERR]", c.Config.Host, "lookup failed,", err )
+		if c.remote != nil { fmt.Println( "Name: Using previous lookup response", c.remote.String() ); return nil }
 		return
 	}
 	if len( addrs ) == 0 { return errors.New( "dns lookup failed for " + c.Config.Host ) }
 	if addrs[0].IP == nil { return errors.New( "no IP found for " + c.Config.Host ) }
-	c.transport.TLSClientConfig.ServerName = c.Config.Host
 	c.remote = &net.TCPAddr{ IP: addrs[0].IP, Port: c.Config.Port }
 	fmt.Println( "Name: Resolved", c.Config.Host, "to", c.remote.IP )
 	return
 }
 
 // Connect issues a connect request to a Hide.me "Connect" endpoint which expects an ordinary POST request with a ConnectRequest JSON payload
-func ( c *Client ) Connect( ctx context.Context, key wgtypes.Key ) ( connectResponse *ConnectResponse, err error ) {
+func ( c *Client ) Connect( key wgtypes.Key ) ( connectResponse *ConnectResponse, err error ) {
 	connectRequest := &ConnectRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
 		Domain:			c.Config.Domain,
@@ -211,7 +197,7 @@ func ( c *Client ) Connect( ctx context.Context, key wgtypes.Key ) ( connectResp
 	}
 	if err = connectRequest.Check(); err != nil { return }
 	
-	responseBody, err := c.postJson( ctx, "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/connect", connectRequest )
+	responseBody, err := c.postJson( "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/connect", connectRequest )
 	if err != nil { return }
 	
 	connectResponse = &ConnectResponse{}
@@ -228,12 +214,12 @@ func ( c *Client ) Disconnect( sessionToken []byte ) ( err error ) {
 	}
 	if err = disconnectRequest.Check(); err != nil { return }
 	
-	_, err = c.postJson( context.Background(), "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/disconnect", disconnectRequest )
+	_, err = c.postJson( "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/disconnect", disconnectRequest )
 	return
 }
 
 // GetAccessToken issues an AccessToken request to a Hide.me "AccessToken" endpoint which expects an ordinary POST request with a AccessTokenRequest JSON payload
-func ( c *Client ) GetAccessToken( ctx context.Context ) ( err error ) {
+func ( c *Client ) GetAccessToken() ( err error ) {
 	accessTokenRequest := &AccessTokenRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
 		Domain:			c.Config.Domain,
@@ -243,7 +229,7 @@ func ( c *Client ) GetAccessToken( ctx context.Context ) ( err error ) {
 	}
 	if err = accessTokenRequest.Check(); err != nil { return }
 	
-	accessTokenJson, err := c.postJson( ctx, "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/accessToken", accessTokenRequest )
+	accessTokenJson, err := c.postJson( "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/accessToken", accessTokenRequest )
 	if err != nil { return }
 	
 	accessTokenString := ""
@@ -256,13 +242,13 @@ func ( c *Client ) GetAccessToken( ctx context.Context ) ( err error ) {
 
 func ( c *Client ) ApplyFilter() ( err error ) {
 	if err = c.Config.Filter.Check(); err != nil { return }
-	response, err := c.postJson( context.Background(), "https://vpn.hide.me:4321/filter", c.Config.Filter )
+	response, err := c.postJson( "https://vpn.hide.me:4321/filter", c.Config.Filter )
 	if string(response) == "false" { err = errors.New( "filter failed" ) }
 	return
 }
 
-func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
-	response, err := c.get( ctx, "https://" + c.remote.String() + "/categorization/categories.json" )
+func ( c *Client ) FetchCategoryList() ( err error ) {
+	response, err := c.get( "https://" + c.remote.String() + "/categorization/categories.json" )
 	if err != nil { return }
 	
 	type Category struct {
