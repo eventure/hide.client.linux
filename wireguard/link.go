@@ -39,7 +39,6 @@ type Link struct {
 	wgClient		*wgctrl.Client
 	
 	privateKey		wgtypes.Key
-	presharedKey	*wgtypes.Key
 	
 	peer			wgtypes.PeerConfig
 	
