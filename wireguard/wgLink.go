@@ -1,6 +1,7 @@
 package wireguard
 
 import (
+	"errors"
 	"fmt"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"net"
@@ -70,4 +71,12 @@ func ( l *Link ) Acct() ( rxBytes, txBytes int64, err error ) {
 		txBytes += peer.TransmitBytes
 	}
 	return
+}
+
+// GetRx fetches the RX traffic counter
+func ( l *Link ) GetRx() ( currentRx int64, err error ) {
+	device, err := l.wgClient.Device( l.Config.Name )
+	if err != nil { fmt.Println( "Link: [ERR] Wireguard device", l.Config.Name, "failed,", err ); return 0, err }
+	if len( device.Peers ) != 1 { fmt.Println( "Link: [ERR] More than one peer on interface", l.Config.Name ); return 0, errors.New( "multiple peers on a single wireguard device" ) }
+	return device.Peers[0].ReceiveBytes, nil
 }

@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/eventure/hide.client.linux/wireguard"
-	"golang.org/x/crypto/ssh/terminal"
 	"gopkg.in/yaml.v2"
 	"net"
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -46,7 +44,7 @@ func NewConfiguration() *Configuration {
 			Username:       		"",											// command line option "-u"
 			Password:				"",											// Only configurable through the config file
 			RestTimeout:	 		10 * time.Second,							// Only configurable through the config file
-			ReconnectWait:	 		5 * time.Second,							// Only configurable through the config file
+			ReconnectWait:	 		30 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
 			FirewallMark:			0,											// command line option "-m"
 			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"
@@ -92,27 +90,6 @@ func ( c *Configuration ) AdjustHost() {
 	if strings.HasSuffix( c.Client.Host, ".hideservers.net" ) { return }
 	c.Client.Host = strings.TrimSuffix( c.Client.Host, ".hide.me" )
 	c.Client.Host += ".hideservers.net"
-}
-
-// InteractiveCredentials asks for username/password when no such credentials were configured
-func ( c *Configuration ) InteractiveCredentials() ( err error ) {
-	if len( c.Client.Username ) > 0 && len( c.Client.Password ) > 0 { return }
-	if ! terminal.IsTerminal( syscall.Stdin ) { err = errors.New( "not a terminal" ); return }
-	if len( c.Client.Username ) == 0 {
-		fmt.Print( "Username: " )
-		if _, err = fmt.Scanln( &c.Client.Username ); err != nil { return }
-	}
-	if len( c.Client.Password ) == 0 {
-		fmt.Print( "Password: " )
-		if passwordBytes, err := terminal.ReadPassword( syscall.Stdin ); err != nil {
-			fmt.Println()
-			return err
-		} else {
-			fmt.Println()
-			c.Client.Password = string( passwordBytes )
-		}
-	}
-	return
 }
 
 func ( c *Configuration ) Print() {

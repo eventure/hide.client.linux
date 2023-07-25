@@ -13,6 +13,7 @@ features include:
 * IPv6 support
 * systemd notification support
 * Split tunneling
+* DNS filter (SmartGuard)
 
 TODO:
 * Server lists and server chooser
@@ -109,6 +110,7 @@ command:
   token - request an Access-Token (required for connect)
   connect - connect to a vpn server
   conf - generate a configuration file to be used with the -c option
+  categories - fetch and dump filtering category list
 ```
 In order to connect to a VPN server an Access-Token must be requested from a VPN server. An Access-Token request is
 issued by the **token** command.
@@ -154,10 +156,10 @@ traffic flow remains unsecured.
 **WARNING**: This option degrades security and should not be used unless the client wishes to tunnel the IPv6 traffic only.
 ```
   -b filename
-    	resolv.conf backup filename (default "/etc/resolv.conf.backup.hide.me")
+    	resolv.conf backup filename (default "")
 ```
-When applying the DNS servers to the system hide.me CLI will back up /etc/resolv.conf file and create a new file in its
-place. Once the VPN session is over, DNS is restored by restoring the backup. 
+Hide.me CLI keeps a backup of /etc/resolv.conf in memory. In addition to that backup hide.me CLI may back up /etc/resolv.conf
+to a file specified by this option.
 ```
   -c filename
     	Configuration filename
@@ -226,7 +228,70 @@ Name of the file which contains an Access-Token.
   -u username
     	hide.me username
 ```
-Set the hide.me username.
+Set hide.me username.
+
+#### DNS Filter (SmartGuard) ####
+Hide.me CLI supports DNS based filtering (SmartGuard). The following options control DNS filtering: 
+```
+  -forceDns
+    	force tunneled DNS handling on hide.me servers
+```
+Activate DNS redirection on a Hide.me VPN server such that each UDP or TCP DNS request will be handled by that Hide.me VPN server
+```
+  -whitelist dns names
+    	comma separated list of allowed dns names
+```
+DNS suffixes which will bypass any filtering engine ( wildcards accepted )
+```
+  -blacklist dns names
+    	comma separated list of filtered dns names
+```
+DNS names which will be filtered
+```
+  -noAds
+    	filter ads
+```
+Activates SmartGuard based ad filtering
+```
+  -noCategories categories
+    	comma separated list of filtered content categories
+```
+Activates fine-grained SmartGuard filtering. Fetch category list with categories [command](#commands)
+``` 
+  -noIllegal kind
+    	filter illegal kind (content, warez, spyware, copyright)
+```
+Activates coarse level filtering of illegal content, warez, spyware and copyrighted material
+```
+  -noMalicious
+    	filter malicious destinations
+```
+Activates filtering of malicious hosts, websites or domains
+```
+  -noMalware
+    	filter malware
+```
+Activates a malware filter. Any site hosting or distributing malware should be filtered out
+```
+  -noRisk level
+    	filter content according to risk level (possible, medium, high)
+```
+Activates a risk filter
+```
+  -noTrackers
+    	filter trackers
+```
+Activates a tracking filter
+```
+  -pg age
+    	apply a parental guidance style age filter (12, 18)
+```
+Activates a parental guidance style filter according to given age limit. Inappropriate content will be filtered out
+```
+  -safeSearch
+    	force safe search with search engines
+```
+Enforces SafeSearch mode with supported search engines (Google, Bing)
 
 ### Integration with systemd
 
