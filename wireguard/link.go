@@ -9,13 +9,6 @@ import (
 	"time"
 )
 
-const (
-	LinkPeerSet = 1
-	LinkAddrsSet = 2
-	LinkRoutesSet = 4
-	LinkDnsSet = 8
-)
-
 type Config struct {
 	Name					string				`yaml:"name,omitempty"`							// Interface name to use for the created WireGuard interface
 	ListenPort				int					`yaml:"listenPort,omitempty"`					// Local UDP listen/bind port - 0 for automatic
@@ -51,10 +44,10 @@ type Link struct {
 	
 	resolvConf		[]byte																																	// resolv.conf backup
 	
-	state			uint32
+	stack			[]func() error
 }
 
-func NewLink( config Config) *Link { return &Link{Config: config} }
+func NewLink( config Config ) *Link { return &Link{ Config: config } }
 func (l *Link) PublicKey() wgtypes.Key { return l.privateKey.PublicKey() }
 
 // Open the wireguard link, i.e. create or open an existing wireguard interface
@@ -67,10 +60,11 @@ func ( l *Link ) Open() ( err error ) {
 }
 
 // Close the wireguard interface
-func ( l *Link ) Close() { l.ipLinkDown() }
+func ( l *Link ) Close() { _ = l.ipLinkDown() }
 
 // Up adds a wireguard peer and routes it
 func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
+	defer func() { if err != nil { l.Down() } }()
 	// Avoid fragmentation if possible, set a small MTU
 	// On IPv4, DS-Lite carrier connection takes MTU down as low as 1452 bytes
 	// On IPv6, assume the lowest Internet IPv6 MTU of 1280 bytes
@@ -79,24 +73,21 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 	if response.Endpoint.IP.To4() == nil { l.mtu = 1280 - 80 } else { l.mtu = 1452 - 60 }																	// Calculate MTU according to the carrier connection protocol
 	if err = l.ipLinkSetMtu(); err != nil { return }																										// Set the wireguard interface MTU
 	if err = l.wgAddPeer( response.PublicKey, response.PresharedKey, response.Endpoint, response.PersistentKeepaliveInterval ); err != nil { return }		// Add a wireguard peer
-	l.state |= LinkPeerSet
+	l.stack = append( l.stack, l.wgRemovePeer )
 	if err = l.ipAddrsAdd( response.AllowedIps ); err != nil { l.Down(); return }																			// Add the IP addresses to the wireguard device
-	l.state |= LinkAddrsSet
+	l.stack = append( l.stack, l.ipAddrsFlush )
 	if err = l.ipRoutesAdd( response ); err != nil { l.Down(); return }																						// Add the default routes over the wireguard interface
-	l.state |= LinkRoutesSet
+	l.stack = append( l.stack, l.ipRoutesRemove )
 	if err = l.dnsSet( response.DNS ); err != nil { l.Down(); return }																						// Set the DNS
-	l.state |= LinkDnsSet
+	l.stack = append( l.stack, l.dnsRestore )
 	fmt.Println( "Link: Up" )
 	return
 }
 
-// Down removes the wireguard peer and un-routes it
+// Down undoes Up, removes the wireguard peer and un-routes it
 func ( l *Link ) Down() {
 	if rxBytes, txBytes, err := l.Acct(); err == nil { fmt.Println( "Link: Received", rxBytes, "bytes, transmitted", txBytes, "bytes" ) }
-	if ( l.state & LinkDnsSet ) > 0  { l.dnsRestore(); l.state &= ^uint32( LinkDnsSet ) }
-	if ( l.state & LinkRoutesSet) > 0 { l.ipRoutesRemove(); l.state &= ^uint32( LinkRoutesSet ) }
-	if ( l.state & LinkAddrsSet ) > 0 { l.ipAddrsFlush(); l.state &= ^uint32( LinkAddrsSet ) }
-	if ( l.state & LinkPeerSet ) > 0 { l.wgRemovePeer(); l.state &= ^uint32( LinkPeerSet ) }
+	for i := len( l.stack )-1; i >= 0; i-- { _ = l.stack[i]() }
 	fmt.Println( "Link: Down" )
 	return
 }
