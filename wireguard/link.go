@@ -1,11 +1,12 @@
 package wireguard
 
 import (
-	"fmt"
+	"errors"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	"log"
 	"time"
 )
 
@@ -24,8 +25,15 @@ type Config struct {
 	IPv6					bool				`yaml:"IPv6,omitempty"`							// Add routes and rules for IPv6 protocol family
 }
 
+func ( c *Config ) Check() ( err error ) {
+	if len( c.Name ) == 0 { err = errors.New( "missing wireGuard interface name" ); return }
+	if c.DpdTimeout == 0 { err = errors.New( "dpd timeout not set" ); return }
+	if c.DpdTimeout > time.Minute { err = errors.New( "dpd timeout above 1 minute" ); return }
+	return
+}
+
 type Link struct {
-	Config
+	*Config
 	
 	wireguardLink	netlink.Link
 	mtu				int
@@ -47,13 +55,14 @@ type Link struct {
 	stack			[]func() error
 }
 
-func NewLink( config Config ) *Link { return &Link{ Config: config } }
+func New( config *Config ) *Link { if config == nil { config = &Config{} }; return &Link{ Config: config } }
 func (l *Link) PublicKey() wgtypes.Key { return l.privateKey.PublicKey() }
 
 // Open the wireguard link, i.e. create or open an existing wireguard interface
 func ( l *Link ) Open() ( err error ) {
+	if err = l.Config.Check(); err != nil { log.Println( "Link: [ERR] Bad WireGuard configuration:", err.Error() ); return }
 	if err = l.handlePrivateKey(); err != nil { return }																									// Check the private key first
-	if l.wgClient, err = wgctrl.New(); err != nil { fmt.Println( "Link: [ERR] Wireguard control client failed,", err ); return }							// Create a wireguard control client
+	if l.wgClient, err = wgctrl.New(); err != nil { log.Println( "Link: [ERR] Wireguard control client failed:", err ); return }							// Create a wireguard control client
 	if err = l.ipLinkUp(); err != nil { return }																											// Bring the networking interface UP
 	if err = l.wgLinkUp(); err != nil { return }																											// Configure the wireguard private key and listen port
 	return
@@ -80,14 +89,14 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 	l.stack = append( l.stack, l.ipRoutesRemove )
 	if err = l.dnsSet( response.DNS ); err != nil { l.Down(); return }																						// Set the DNS
 	l.stack = append( l.stack, l.dnsRestore )
-	fmt.Println( "Link: Up" )
+	log.Println( "Link: Up" )
 	return
 }
 
 // Down undoes Up, removes the wireguard peer and un-routes it
 func ( l *Link ) Down() {
-	if rxBytes, txBytes, err := l.Acct(); err == nil { fmt.Println( "Link: Received", rxBytes, "bytes, transmitted", txBytes, "bytes" ) }
+	if rxBytes, txBytes, err := l.Acct(); err == nil { log.Println( "Link: Received", rxBytes, "bytes, transmitted", txBytes, "bytes" ) }
 	for i := len( l.stack )-1; i >= 0; i-- { _ = l.stack[i]() }
-	fmt.Println( "Link: Down" )
+	log.Println( "Link: Down" )
 	return
 }

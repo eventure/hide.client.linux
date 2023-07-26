@@ -1,7 +1,7 @@
 package rest
 
 import (
-	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -26,11 +26,11 @@ func ( w *ConnectResponse ) printSlice( ips []net.IP ) string {
 }
 
 func ( w *ConnectResponse ) Print() {
-	fmt.Println( "Rest: Remote UDP endpoint is", w.Endpoint.String() )
-	fmt.Println( "Rest: Keepalive is", w.PersistentKeepaliveInterval.Seconds(), "seconds" )
-	fmt.Println( "Rest: Assigned IPs are", w.printSlice( w.AllowedIps ) )
-	fmt.Println( "Rest: Gateway IPs are", w.printSlice( w.Gateway ) )
-	fmt.Println( "Rest: DNS servers are", w.printSlice( w.DNS ) )
-	if w.StaleAccessToken{ fmt.Println( "Conn: Access-Token is stale" ) }
-	// fmt.Println( "Conn: Session-Token is", base64.StdEncoding.EncodeToString( w.SessionToken ) )
+	log.Println( "Rest: Remote UDP endpoint is", w.Endpoint.String() )
+	log.Println( "Rest: Keepalive is", w.PersistentKeepaliveInterval.Seconds(), "seconds" )
+	log.Println( "Rest: Assigned IPs are", w.printSlice( w.AllowedIps ) )
+	log.Println( "Rest: Gateway IPs are", w.printSlice( w.Gateway ) )
+	log.Println( "Rest: DNS servers are", w.printSlice( w.DNS ) )
+	if w.StaleAccessToken{ log.Println( "Conn: Access-Token is stale" ) }
+	// log.Println( "Conn: Session-Token is", base64.StdEncoding.EncodeToString( w.SessionToken ) )
 }

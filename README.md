@@ -111,6 +111,7 @@ command:
   connect - connect to a vpn server
   conf - generate a configuration file to be used with the -c option
   categories - fetch and dump filtering category list
+  service - run in remotelly controlled service mode
 ```
 In order to connect to a VPN server an Access-Token must be requested from a VPN server. An Access-Token request is
 issued by the **token** command.
@@ -123,6 +124,12 @@ Once an Access-Token is in place it may be used for **connect** requests. Stale 
 hide.me CLI does not necessarily have to be invoked with a bunch of command line parameters. Instead, a YAML formatted
 configuration file may be used to specify all the options. To generate such a configuration file the **conf** command
 may be used.
+
+For the purposes of DNS filtering (SmartGuard), a list of filtering categories can be obtained with **categories** command
+
+hide.me CLI can be run in **service** mode. When started in service mode, hide.me CLI just exposes a REST interface for
+control. The controller is responsible for configuring connections, activation of the kill-switch or any other operation.
+REST interface listen address is configurable through -caddr option. 
 
 Note that there are a few options which are configurable only through the configuration file. Such options are:
 * Password - **DANGEROUS**, do not use this option unless you're aware of the security implications 
@@ -171,6 +178,21 @@ Use a configuration file named "filename".
 ```
 During TLS negotiation the VPN server's certificate needs to be verified. This option makes it possible to specify
 an alternate CA certificate bundle file.
+```
+  -caddr address
+    	Control interface listen address (default "@hide.me")
+```
+Set the service mode control interface listen address. hide.me CLI, by default, listens on an abstract UNIX socket hide.me 
+```
+  -ccert certificate
+    	Control interface certificate file
+```
+Set the service mode control interface X509 certificate in PEM format
+```
+  -ckey key
+    	Control interface key file
+```
+Set the service mode control interface private key in PEM format
 ```
   -d DNS servers
     	comma separated list of DNS servers used for client requests (default "209.250.251.37:53,217.182.206.81:53")

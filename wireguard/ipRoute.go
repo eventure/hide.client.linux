@@ -1,10 +1,10 @@
 package wireguard
 
 import (
-	"fmt"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
+	"log"
 	"net"
 	"strconv"
 )
@@ -36,8 +36,8 @@ func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 		gatewayRoute := &netlink.Route{ LinkIndex: l.wireguardLink.Attrs().Index, Scope: unix.RT_SCOPE_LINK, Dst: netlink.NewIPNet( gw ), Protocol: unix.RTPROT_BOOT, Table: l.Config.RoutingTable, Type: unix.RTN_UNICAST, MTU: l.mtu }
 		// Flags: unix.RTNH_F_ONLINK cannot be used due to missing support on IPv6 with the older kernels, host routes must be used instead
 		// defaultRoute := &netlink.Route{ LinkIndex: l.wireguardLink.Attrs().Index, Scope: unix.RT_SCOPE_UNIVERSE, Gw: gw, Protocol: unix.RTPROT_BOOT, Table: l.Config.RoutingTable, Type: unix.RTN_UNICAST }
-		if err = netlink.RouteAdd( gatewayRoute ); err != nil { fmt.Println( "Link: [ERR] Gateway route", routeString( gatewayRoute ), "addition failed,", err ); continue }
-		fmt.Println( "Link: Gateway route", routeString( gatewayRoute ), "added" )
+		if err = netlink.RouteAdd( gatewayRoute ); err != nil { log.Println( "Link: [ERR] Gateway route", routeString( gatewayRoute ), "addition failed:", err ); continue }
+		log.Println( "Link: Gateway route", routeString( gatewayRoute ), "added" )
 		l.gatewayRoutes = append( l.gatewayRoutes, gatewayRoute)
 		
 		routes := []netlink.Route(nil)
@@ -76,8 +76,8 @@ func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 		}
 		
 		for i, route := range routes {
-			if err = netlink.RouteAdd( &route ); err != nil { fmt.Println( "Link: [ERR] Route", routeString( &route ), "addition failed,", err ); continue }
-			fmt.Println( "Link: Route", routeString( &route ), "added" )
+			if err = netlink.RouteAdd( &route ); err != nil { log.Println( "Link: [ERR] Route", routeString( &route ), "addition failed:", err ); continue }
+			log.Println( "Link: Route", routeString( &route ), "added" )
 			l.routes = append( l.routes, &routes[i] )
 		}
 	}
@@ -87,13 +87,13 @@ func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 // Remove the default routes
 func (l *Link) ipRoutesRemove() ( err error ) {
 	for _, route := range l.routes {
-		if err = netlink.RouteDel( route ); err != nil { fmt.Println( "Link: [ERR] Route", routeString( route ), "removal failed,", err ); continue }
-		fmt.Println( "Link: Route", routeString( route ), "removed" )
+		if err = netlink.RouteDel( route ); err != nil { log.Println( "Link: [ERR] Route", routeString( route ), "removal failed:", err ); continue }
+		log.Println( "Link: Route", routeString( route ), "removed" )
 	}
 	l.routes = nil
 	for _, route := range l.gatewayRoutes {
-		if err = netlink.RouteDel( route ); err != nil { fmt.Println( "Link: [ERR] Gateway route", routeString( route ), "removal failed,", err ); continue }
-		fmt.Println( "Link: Gateway route", routeString( route ), "removed" )
+		if err = netlink.RouteDel( route ); err != nil { log.Println( "Link: [ERR] Gateway route", routeString( route ), "removal failed:", err ); continue }
+		log.Println( "Link: Gateway route", routeString( route ), "removed" )
 	}
 	l.gatewayRoutes = nil
 	return
@@ -104,7 +104,7 @@ func (l *Link) LoopbackRoutesAdd() ( err error ) {
 	switch l.Config.RoutingTable { case 0, 253, 254, 255: return }										// Skip for unspecified, default, main and local routing tables
 	routes := []netlink.Route(nil)
 	lo, err := net.InterfaceByName( "lo" )
-	if err != nil { fmt.Println( "Link: [ERR] Loopback interface lookup failed,", err ); return }
+	if err != nil { log.Println( "Link: [ERR] Loopback interface lookup failed:", err ); return }
 	
 	route := netlink.Route{																				// IPv4
 		LinkIndex: lo.Index,
@@ -118,8 +118,8 @@ func (l *Link) LoopbackRoutesAdd() ( err error ) {
 	if l.Config.IPv6 { routes = append( routes, route ) }
 	
 	for i, route := range routes {
-		if err = netlink.RouteAdd( &route ); err != nil { fmt.Println( "Link: [ERR] Loopback route", routeString( &route ), "addition failed,", err ); continue }
-		fmt.Println( "Link: Loopback route", routeString( &route ), "added" )
+		if err = netlink.RouteAdd( &route ); err != nil { log.Println( "Link: [ERR] Loopback route", routeString( &route ), "addition failed:", err ); continue }
+		log.Println( "Link: Loopback route", routeString( &route ), "added" )
 		l.loopbackRoutes = append( l.loopbackRoutes, &routes[i] )
 	}
 	return
@@ -129,8 +129,8 @@ func (l *Link) LoopbackRoutesAdd() ( err error ) {
 func (l *Link) LoopbackRoutesDel() {
 	switch l.Config.RoutingTable { case 0, 253, 254, 255: return }										// Skip for unspecified, default, main and local routing tables
 	for _, route := range l.loopbackRoutes {
-		if err := netlink.RouteDel( route ); err != nil { fmt.Println( "Link: [ERR] Loopback route", routeString( route ), "removal failed,", err ); continue }
-		fmt.Println( "Link: Loopback route", routeString( route ), "removed" )
+		if err := netlink.RouteDel( route ); err != nil { log.Println( "Link: [ERR] Loopback route", routeString( route ), "removal failed:", err ); continue }
+		log.Println( "Link: Loopback route", routeString( route ), "removed" )
 	}
 	l.loopbackRoutes = nil
 }
@@ -145,8 +145,8 @@ func (l *Link) ThrowRouteAdd( logPrefix string, dst *net.IPNet ) ( err error ) {
 		Table:		l.Config.RoutingTable,
 		Type:       unix.RTN_THROW,
 	}
-	if err = netlink.RouteAdd( &route ); err != nil { fmt.Println( "Link: [ERR]", logPrefix, "throw route", routeString( &route ), "addition failed,", err ); return }
-	fmt.Println( "Link:", logPrefix, "throw route", routeString( &route ), "added" )
+	if err = netlink.RouteAdd( &route ); err != nil { log.Println( "Link: [ERR]", logPrefix, "throw route", routeString( &route ), "addition failed:", err ); return }
+	log.Println( "Link:", logPrefix, "throw route", routeString( &route ), "added" )
 	return
 }
 
@@ -160,7 +160,7 @@ func (l *Link) ThrowRouteDel( logPrefix string, dst *net.IPNet ) ( err error ) {
 		Table:		l.Config.RoutingTable,
 		Type:       unix.RTN_THROW,
 	}
-	if err = netlink.RouteDel( &route ); err != nil { fmt.Println( "Link: [ERR]", logPrefix, "throw route", routeString( &route ), "deletion failed,", err ); return }
-	fmt.Println( "Link:", logPrefix, "throw route", routeString( &route ), "deleted" )
+	if err = netlink.RouteDel( &route ); err != nil { log.Println( "Link: [ERR]", logPrefix, "throw route", routeString( &route ), "deletion failed:", err ); return }
+	log.Println( "Link:", logPrefix, "throw route", routeString( &route ), "deleted" )
 	return
 }

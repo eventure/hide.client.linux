@@ -9,11 +9,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"golang.org/x/sys/unix"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"io"
-	"io/ioutil"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -23,16 +22,21 @@ import (
 	"time"
 )
 
+const userAgent = "HIDE.ME.LINUX.CLI-0.9.5"
+
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrHttpStatusBad = errors.New( "bad HTTP status" )
 var ErrBadPin = errors.New( "bad public key PIN" )
+var ErrMissingHost = errors.New( "missing host" )
+var ErrBadDomain = errors.New( "bad domain ")
 
 type Config struct {
 	APIVersion				string			`yaml:"-"`										// Current API version is 1.0.0
 	Host					string			`yaml:"host,omitempty"`							// FQDN of the server
 	Port					int				`yaml:"port,omitempty"`							// Port to connect to when issuing REST requests
-	Domain					string			`yaml:"-"`										// Domain ( hide.me )
-	AccessTokenFile			string			`yaml:"accessToken,omitempty"`					// Access-Token for REST requests
+	Domain					string			`yaml:"domain,omitempty"`						// Domain ( hide.me )
+	AccessTokenPath			string			`yaml:"accessTokenPath,omitempty"`				// Access-Token path
+	AccessToken				string			`yaml:"accessToken,omitempty"`					// Base64 encoded Access-Token
 	Username				string			`yaml:"username,omitempty"`						// Username ( Access-Token takes precedence )
 	Password				string			`yaml:"password,omitempty"`						// Password ( Access-Token takes precedence )
 	RestTimeout				time.Duration	`yaml:"restTimeout,omitempty"`					// Timeout for REST requests
@@ -44,8 +48,17 @@ type Config struct {
 	Filter					Filter			`yaml:"filter,omitempty"`						// Filtering settings
 }
 
+// SetHost adds .hideservers.net suffix for short names ( nl becomes nl.hideservers.net ) or removes .hide.me and replaces it with .hideservers.net.
+func ( c *Config ) SetHost( host string ) {
+	c.Host = host
+	if net.ParseIP( c.Host ) != nil { return }
+	if strings.HasSuffix( c.Host, ".hideservers.net" ) { return }
+	c.Host = strings.TrimSuffix( c.Host, ".hide.me" )
+	c.Host += ".hideservers.net"
+}
+
 type Client struct {
-	Config
+	*Config
 	
 	client					*http.Client
 	resolver				*net.Resolver
@@ -56,17 +69,19 @@ type Client struct {
 	authorizedPins			map[string]string
 }
 
-func New( config Config ) *Client { return &Client{ Config: config } }
+func New( config *Config ) *Client { if config == nil { config = &Config{} }; return &Client{ Config: config } }
 
 func ( c *Client ) Init() ( err error ) {
 	if c.Config.Port == 0 { c.Config.Port = 432 }
+	if c.Port == 443 { c.APIVersion = "v1"; log.Println( "Init: [WARNING] Using port 443, API unstable" ) }
+	if c.Domain != "hide.me" { err = ErrBadDomain; return }
 	
-	dialer := &net.Dialer{}																	// Use a custom dialer to set the socket mark on sockets when configured
+	dialer := &net.Dialer{}																															// Use a custom dialer to set the socket mark on sockets when configured
 	if c.Config.FirewallMark > 0 {
 		dialer.Control = func( _, _ string, rawConn syscall.RawConn ) ( err error ) {
 			_ = rawConn.Control( func( fd uintptr ) {
 				err = syscall.SetsockoptInt( int(fd), unix.SOL_SOCKET, unix.SO_MARK, c.Config.FirewallMark )
-				if err != nil { fmt.Println( "Dial: [ERR] Set mark failed,", err ) }
+				if err != nil { log.Println( "Dial: [ERR] Set mark failed:", err ) }
 			})
 			return
 		}
@@ -76,7 +91,7 @@ func ( c *Client ) Init() ( err error ) {
 	}}
 	dialer.Resolver = c.resolver
 	
-	transport := &http.Transport{
+	transport := &http.Transport{																													// HTTPS client setup
 		DialContext: 			dialer.DialContext,
 		TLSHandshakeTimeout:	time.Second * 5,
 		DisableKeepAlives:		true,
@@ -84,7 +99,7 @@ func ( c *Client ) Init() ( err error ) {
 		ForceAttemptHTTP2:		true,
 		TLSClientConfig: &tls.Config{
 			NextProtos:				[]string{ "h2" },
-			ServerName:				"hideservers.net",										// hideservers.net is always a certificate SAN
+			ServerName:				"hideservers.net",																								// hideservers.net is always a certificate SAN
 			MinVersion:				tls.VersionTLS13,
 			VerifyPeerCertificate:	c.Pins,
 		},
@@ -98,18 +113,24 @@ func ( c *Client ) Init() ( err error ) {
 		Transport:	transport,
 		Timeout:	c.Config.RestTimeout,
 	}
-	if len( c.Config.DnsServers ) > 0 {
+	
+	if len( c.Config.DnsServers ) > 0 {																												// DNS setup
 		for _, dnsServer := range strings.Split( c.Config.DnsServers, "," ) {
 			c.dnsServers = append( c.dnsServers, strings.TrimSpace( dnsServer ) )
 		}
 	} else { c.dnsServers = append( c.dnsServers, "1.1.1.1:53" ) }
-	if len( c.Config.AccessTokenFile ) > 0 {
-		if accessTokenBytes, err := os.ReadFile( c.Config.AccessTokenFile ); err == nil {
-			c.accessToken, _ = base64.StdEncoding.DecodeString( string( accessTokenBytes ) )
-			c.Config.Filter.AccessToken = c.accessToken
+	
+	if len( c.Config.AccessToken ) > 0 {																											// Access-Token
+		if c.accessToken, err = base64.StdEncoding.DecodeString( c.Config.AccessToken ); err != nil { return }
+	}
+	if c.accessToken == nil && len( c.Config.AccessTokenPath ) > 0 {
+		if accessTokenBytes, err := os.ReadFile( c.Config.AccessTokenPath ); err == nil {
+			if c.accessToken, err = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ); err != nil { return err }
 		}
 	}
-	c.authorizedPins = map[string]string{
+	c.Config.Filter.AccessToken = c.accessToken
+	
+	c.authorizedPins = map[string]string{																											// Certificate names and pins
 		"Hide.Me Root CA": "AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",
 		"Hide.Me Server CA #1": "CsEyDelMHMPh9qLGgeQn8sJwdUwvc+fCMhOU9Ne5PbU=",
 		"DigiCert Global Root CA": "r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E=",
@@ -130,11 +151,11 @@ func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error
 			pin := base64.StdEncoding.EncodeToString( sum[:] )
 			for name, authorizedPin := range c.authorizedPins {
 				if certificate.Subject.CommonName == name && pin == authorizedPin {
-					fmt.Println( "Pins:", certificate.Subject.CommonName, "pin OK" )
+					log.Println( "Pins:", certificate.Subject.CommonName, "pin OK" )
 					continue chainLoop
 				}
 			}
-			fmt.Println( "Pins:", certificate.Subject.CommonName, "pin failed" )
+			log.Println( "Pins:", certificate.Subject.CommonName, "pin failed" )
 			return ErrBadPin
 		}
 	}
@@ -146,24 +167,24 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 	if err != nil { return }
 	request, err := http.NewRequestWithContext( ctx, "POST", url, bytes.NewReader( body ) )
 	if err != nil { return }
-	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.4" )
+	request.Header.Set( "user-agent", userAgent )
 	request.Header.Add( "content-type", "application/json" )
 	response, err := c.client.Do( request )
 	if err != nil { return }
 	defer response.Body.Close()
-	if response.StatusCode == http.StatusForbidden { fmt.Println( "Rest: [ERR] Application update required" ); return nil, ErrAppUpdateRequired }
-	if response.StatusCode != http.StatusOK { fmt.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
+	if response.StatusCode == http.StatusForbidden { log.Println( "Rest: [ERR] Application update required" ); return nil, ErrAppUpdateRequired }
+	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
 	return io.ReadAll( response.Body )
 }
 
 func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte, err error ) {
 	request, err := http.NewRequestWithContext( ctx, "GET", url, nil )
 	if err != nil { return }
-	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-0.9.4" )
+	request.Header.Set( "user-agent", userAgent )
 	response, err := c.client.Do( request )
 	if err != nil { return }
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK { fmt.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
+	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
 	return io.ReadAll( response.Body )
 }
 
@@ -171,22 +192,24 @@ func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return tru
 
 // Resolve resolves an IP of a Hide.me endpoint and stores that IP for further use. Hide.me balances DNS rapidly, so once an IP is acquired it needs to be used for the remainder of the session
 func ( c *Client ) Resolve( ctx context.Context ) ( err error ) {
-	if ip := net.ParseIP( c.Config.Host ); ip != nil { c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }; return }		// c.Host is an IP address, set remote endpoint to that IP
+	if len( c.Host ) == 0 { err = ErrMissingHost; return }
+	if ip := net.ParseIP( c.Config.Host ); ip != nil { c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }; return }								// c.Host is an IP address, set remote endpoint to that IP
 	addrs, err := c.resolver.LookupIPAddr( ctx, c.Config.Host )
-	if err != nil {																											// If DNS fails during reconnect then the remote server address in c.remote will be reused for the reconnection attempt
-		fmt.Println( "Name: [ERR]", c.Config.Host, "lookup failed,", err )
-		if c.remote != nil { fmt.Println( "Name: Using previous lookup response", c.remote.String() ); return nil }
+	if err != nil {																																	// If DNS fails during reconnect then the remote server address in c.remote will be reused for the reconnection attempt
+		log.Println( "Name: [ERR]", c.Config.Host, "lookup failed:", err )
+		if c.remote != nil { log.Println( "Name: Using previous lookup response", c.remote.String() ); return nil }
 		return
 	}
 	if len( addrs ) == 0 { return errors.New( "dns lookup failed for " + c.Config.Host ) }
 	if addrs[0].IP == nil { return errors.New( "no IP found for " + c.Config.Host ) }
 	c.remote = &net.TCPAddr{ IP: addrs[0].IP, Port: c.Config.Port }
-	fmt.Println( "Name: Resolved", c.Config.Host, "to", c.remote.IP )
+	log.Println( "Name: Resolved", c.Config.Host, "to", c.remote.IP )
 	return
 }
 
 // Connect issues a connect request to a Hide.me "Connect" endpoint which expects an ordinary POST request with a ConnectRequest JSON payload
 func ( c *Client ) Connect( ctx context.Context, key wgtypes.Key ) ( connectResponse *ConnectResponse, err error ) {
+	if len( c.Host ) == 0 { err = ErrMissingHost; return }
 	connectRequest := &ConnectRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
 		Domain:			c.Config.Domain,
@@ -205,6 +228,7 @@ func ( c *Client ) Connect( ctx context.Context, key wgtypes.Key ) ( connectResp
 
 // Disconnect issues a disconnect request to a Hide.me "Disconnect" endpoint which expects an ordinary POST request with a DisconnectRequest JSON payload
 func ( c *Client ) Disconnect( ctx context.Context, sessionToken []byte ) ( err error ) {
+	if len( c.Host ) == 0 { err = ErrMissingHost; return }
 	disconnectRequest := &DisconnectRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
 		Domain:			c.Config.Domain,
@@ -217,7 +241,8 @@ func ( c *Client ) Disconnect( ctx context.Context, sessionToken []byte ) ( err 
 }
 
 // GetAccessToken issues an AccessToken request to a Hide.me "AccessToken" endpoint which expects an ordinary POST request with a AccessTokenRequest JSON payload
-func ( c *Client ) GetAccessToken( ctx context.Context ) ( err error ) {
+func ( c *Client ) GetAccessToken( ctx context.Context ) ( accessToken string, err error ) {
+	if len( c.Host ) == 0 { err = ErrMissingHost; return }
 	accessTokenRequest := &AccessTokenRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
 		Domain:			c.Config.Domain,
@@ -230,11 +255,10 @@ func ( c *Client ) GetAccessToken( ctx context.Context ) ( err error ) {
 	accessTokenJson, err := c.postJson( ctx, "https://" + c.remote.String() + "/" + c.Config.APIVersion + "/accessToken", accessTokenRequest )
 	if err != nil { return }
 	
-	accessTokenString := ""
-	if err = json.Unmarshal( accessTokenJson, &accessTokenString ); err != nil { return }
-	if c.accessToken, err = base64.StdEncoding.DecodeString( accessTokenString ); err != nil { return }
+	if err = json.Unmarshal( accessTokenJson, &accessToken ); err != nil { return }
+	if c.accessToken, err = base64.StdEncoding.DecodeString( accessToken ); err != nil { return }
 	
-	if len( c.Config.AccessTokenFile ) > 0 { err = ioutil.WriteFile( c.Config.AccessTokenFile, []byte( accessTokenString ), 0600 ) }
+	if len( c.Config.AccessTokenPath ) > 0 { err = os.WriteFile( c.Config.AccessTokenPath, []byte( accessToken ), 0600 ) }
 	return
 }
 
@@ -256,8 +280,8 @@ func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
 	cats := []Category{}
 	if err = json.Unmarshal( response, &cats ); err != nil { return }
 	
-	fmt.Printf( "%40s | %s\n", "CATEGORY", "DESCRIPTION" )
-	fmt.Printf( "%40s | %s\n", "--------", "-----------" )
-	for _, cat := range cats { fmt.Printf( "%40s | %s\n", cat.Name, cat.Description ) }
+	log.Printf( "%40s | %s\n", "CATEGORY", "DESCRIPTION" )
+	log.Printf( "%40s | %s\n", "--------", "-----------" )
+	for _, cat := range cats { log.Printf( "%40s | %s\n", cat.Name, cat.Description ) }
 	return
 }

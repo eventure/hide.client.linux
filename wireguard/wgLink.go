@@ -2,8 +2,8 @@ package wireguard
 
 import (
 	"errors"
-	"fmt"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
+	"log"
 	"net"
 	"time"
 )
@@ -16,15 +16,15 @@ func ( l *Link ) wgLinkUp() ( err error ) {
 	}
 	if l.Config.FirewallMark > 0 { wgConfig.FirewallMark = &l.Config.FirewallMark }
 	err = l.wgClient.ConfigureDevice( l.Config.Name, wgConfig )
-	if err != nil { fmt.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed,", err ); return }
-	fmt.Println( "Link: Wireguard device", l.Config.Name, "configured" )
+	if err != nil { log.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed:", err ); return }
+	log.Println( "Link: Wireguard device", l.Config.Name, "configured" )
 	return
 }
 
 // Create a peer
 func ( l *Link ) wgAddPeer( publicKeyBytes []byte, presharedKeyBytes []byte, endpoint net.UDPAddr, persistentKeepaliveInterval time.Duration ) ( err error ) {
 	publicKey, err := wgtypes.NewKey( publicKeyBytes )																	// Parse the public key
-	if err != nil { fmt.Println( "Link: [ERR] Parsing the public key for", endpoint.String(), "failed,", err ); return }
+	if err != nil { log.Println( "Link: [ERR] Parsing the public key for", endpoint.String(), "failed:", err ); return }
 	var presharedKey wgtypes.Key
 	if len( presharedKeyBytes ) > 0 {																					// Parse the preshared key ( if any )
 		if presharedKey, err = wgtypes.NewKey( presharedKeyBytes ); err != nil { return }
@@ -38,15 +38,15 @@ func ( l *Link ) wgAddPeer( publicKeyBytes []byte, presharedKeyBytes []byte, end
 		ReplaceAllowedIPs:				true,
 		AllowedIPs:						[]net.IPNet {
 											{ IP: net.ParseIP( "0.0.0.0" ), Mask: net.CIDRMask( 0, 32 ) },				// IPv4 default route
-											{ IP: net.ParseIP("::"), Mask: net.CIDRMask(0, 128) },						// IPv6 default route
+											{ IP: net.ParseIP("::"), Mask: net.CIDRMask( 0, 128 ) },					// IPv6 default route
 										},
 	}
 	err = l.wgClient.ConfigureDevice( l.Config.Name, wgtypes.Config{
 		ReplacePeers:	true,
 		Peers:			[]wgtypes.PeerConfig{ l.peer },
 	})
-	if err != nil { fmt.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed,", err ); return }
-	fmt.Println( "Link: Peer", endpoint.String(), "added" )
+	if err != nil { log.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed:", err ); return }
+	log.Println( "Link: Peer", endpoint.String(), "added" )
 	return
 }
 
@@ -57,8 +57,8 @@ func ( l *Link ) wgRemovePeer() ( err error ) {
 		ReplacePeers:	true,
 		Peers:			[]wgtypes.PeerConfig{ l.peer },
 	})
-	if err != nil { fmt.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed,", err ); return }
-	fmt.Println( "Link: Peer", l.peer.Endpoint.String(), "removed" )
+	if err != nil { log.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed:", err ); return }
+	log.Println( "Link: Peer", l.peer.Endpoint.String(), "removed" )
 	return
 }
 
@@ -76,7 +76,7 @@ func ( l *Link ) Acct() ( rxBytes, txBytes int64, err error ) {
 // GetRx fetches the RX traffic counter
 func ( l *Link ) GetRx() ( currentRx int64, err error ) {
 	device, err := l.wgClient.Device( l.Config.Name )
-	if err != nil { fmt.Println( "Link: [ERR] Wireguard device", l.Config.Name, "failed,", err ); return 0, err }
-	if len( device.Peers ) != 1 { fmt.Println( "Link: [ERR] More than one peer on interface", l.Config.Name ); return 0, errors.New( "multiple peers on a single wireguard device" ) }
+	if err != nil { log.Println( "Link: [ERR] Wireguard device", l.Config.Name, "failed:", err ); return 0, err }
+	if len( device.Peers ) != 1 { log.Println( "Link: [ERR] More than one peer on interface", l.Config.Name ); return 0, errors.New( "multiple peers on a single wireguard device" ) }
 	return device.Peers[0].ReceiveBytes, nil
 }
