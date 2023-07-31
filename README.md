@@ -111,7 +111,7 @@ command:
   connect - connect to a vpn server
   conf - generate a configuration file to be used with the -c option
   categories - fetch and dump filtering category list
-  service - run in remotelly controlled service mode
+  service - run in remotely controlled service mode
 ```
 In order to connect to a VPN server an Access-Token must be requested from a VPN server. An Access-Token request is
 issued by the **token** command.
