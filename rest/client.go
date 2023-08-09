@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-const userAgent = "HIDE.ME.LINUX.CLI-0.9.5"
+const userAgent = "HIDE.ME.LINUX.CLI-0.9.6"
 
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrHttpStatusBad = errors.New( "bad HTTP status" )
