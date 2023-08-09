@@ -14,7 +14,7 @@ func ( l *Link ) wgLinkUp() ( err error ) {
 		PrivateKey:	&l.privateKey,
 		ListenPort:	&l.Config.ListenPort,
 	}
-	if l.Config.FirewallMark > 0 { wgConfig.FirewallMark = &l.Config.FirewallMark }
+	if l.Config.Mark > 0 { wgConfig.FirewallMark = &l.Config.Mark }
 	err = l.wgClient.ConfigureDevice( l.Config.Name, wgConfig )
 	if err != nil { log.Println( "Link: [ERR] Wireguard device", l.Config.Name, "configuration failed:", err ); return }
 	log.Println( "Link: Wireguard device", l.Config.Name, "configured" )

@@ -26,7 +26,7 @@ func NewConfiguration() *Configuration {
 		WireGuard: &wireguard.Config{
 			Name:					"vpn",										// command line option "-i"
 			ListenPort:				0,											// command line option "-l"
-			FirewallMark:			0,											// command line option "-m"
+			Mark:					55555,										// command line option "-m"
 			RoutingTable:			55555,										// command line option "-r"
 			RPDBPriority:			10,											// command line option "-R"
 			LeakProtection:			true,										// command line option "-k"
@@ -48,7 +48,7 @@ func NewConfiguration() *Configuration {
 			RestTimeout:	 		10 * time.Second,							// Only configurable through the config file
 			ReconnectWait:	 		30 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
-			FirewallMark:			0,											// command line option "-m"
+			Mark:					55555,										// command line option "-m"
 			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"
 		},
 		Control: &control.Config{
@@ -109,7 +109,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	
 	flag.String  ( "i",   c.WireGuard.Name, "network `interface` name" )																			// Link related flags
 	flag.Int     ( "l",   c.WireGuard.ListenPort, "listen `port`" )
-	flag.Int     ( "m",   c.WireGuard.FirewallMark, "firewall `mark` for wireguard and hide.me client originated traffic" )
+	flag.Int     ( "m",   c.WireGuard.Mark, "firewall `mark` for wireguard and hide.me client originated traffic" )
 	flag.Int     ( "r",   c.WireGuard.RoutingTable, "routing `table` to use" )
 	flag.Int     ( "R",   c.WireGuard.RPDBPriority, "RPDB rule `priority`" )
 	flag.Bool	 ( "k",   c.WireGuard.LeakProtection, "enable/disable leak protection a.k.a. kill-switch" )
@@ -165,8 +165,8 @@ func ( c *Configuration ) Parse() ( err error ) {
 			
 			case "i":   			c.WireGuard.Name = f.Value.String()																											// WireGuard related flags
 			case "l":   			c.WireGuard.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: ListenPort malformed" ) }
-			case "m":   			c.WireGuard.FirewallMark, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: FirewallMark malformed" ) }
-									c.Rest.FirewallMark = c.WireGuard.FirewallMark
+			case "m":   			c.WireGuard.Mark, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: FirewallMark malformed" ) }
+									c.Rest.Mark = c.WireGuard.Mark
 			case "R":   			c.WireGuard.RPDBPriority, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: RPDBPriority malformed" ) }
 			case "r":   			c.WireGuard.RoutingTable, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: RoutingTable malformed" ) }
 			case "k":   			if f.Value.String() == "false" { c.WireGuard.LeakProtection = false }

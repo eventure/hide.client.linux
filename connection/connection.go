@@ -123,13 +123,15 @@ func ( c *Connection ) Connect() ( err error ) {
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 	c.Lock(); c.connectCancel = cancel; c.Unlock()
 	
-	var udpAddr *net.UDPAddr
-	for _, dnsServer := range strings.Split( c.restClient.Config.DnsServers, "," ) {															// throw routes for configured DNS servers
-		if len( dnsServer ) == 0 { continue }
-		if udpAddr, err = net.ResolveUDPAddr( "udp", dnsServer ); err != nil { log.Println( "Init: [ERR] DNS server address resolve failed:", err ); return }
-		dns := wireguard.Ip2Net( udpAddr.IP )
-		if err = c.link.ThrowRouteAdd( "DNS server", dns  ); err != nil { log.Println( "Init: [ERR] Route DNS server failed:", err ); return }
-		c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "DNS server", dns ) } )
+	if c.link.Config.Mark == 0 {
+		var udpAddr *net.UDPAddr
+		for _, dnsServer := range strings.Split( c.restClient.Config.DnsServers, "," ) {														// throw routes for configured DNS servers ( only when marks are not being used )
+			if len( dnsServer ) == 0 { continue }
+			if udpAddr, err = net.ResolveUDPAddr( "udp", dnsServer ); err != nil { log.Println( "Init: [ERR] DNS server address resolve failed:", err ); return }
+			dns := wireguard.Ip2Net( udpAddr.IP )
+			if err = c.link.ThrowRouteAdd( "DNS server", dns  ); err != nil { log.Println( "Init: [ERR] Route DNS server failed:", err ); return }
+			c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "DNS server", dns ) } )
+		}
 	}
 	
 	for _, network := range strings.Split( c.link.Config.SplitTunnel, "," ) {																	// throw routes for split-tunnel destinations
@@ -144,8 +146,10 @@ func ( c *Connection ) Connect() ( err error ) {
 	serverIpNet := wireguard.Ip2Net( c.restClient.Remote().IP )
 	
 	c.Lock()
-	if err = c.link.ThrowRouteAdd( "VPN server", serverIpNet ); err != nil { c.Unlock(); return }												// throw route towards the VPN server
-	c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "VPN server", serverIpNet ) } )
+	if c.link.Config.Mark == 0 {																												// throw route for VPN server's IP ( only when marks are not being used )
+		if err = c.link.ThrowRouteAdd( "VPN server", serverIpNet ); err != nil { c.Unlock(); return }											// throw route towards the VPN server
+		c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "VPN server", serverIpNet ) } )
+	}
 	c.Unlock()
 	
 	log.Println( "Conn: Connecting to", serverIpNet.IP )																						// Add the throw route in order to reach Hide.me
