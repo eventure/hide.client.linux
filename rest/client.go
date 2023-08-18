@@ -78,7 +78,8 @@ func ( c *Client ) Init() ( err error ) {
 	
 	dialer := &net.Dialer{}																															// Use a custom dialer to set the socket mark on sockets when configured
 	if c.Config.Mark > 0 {
-		dialer.Control = func( _, _ string, rawConn syscall.RawConn ) ( err error ) {
+		dialer.Control = func( network, address string, rawConn syscall.RawConn ) ( err error ) {
+			if network == "tcp4" && address == "10.255.255.250:4321" { return }																		// Do not set marks for in-tunnel traffic
 			_ = rawConn.Control( func( fd uintptr ) {
 				err = syscall.SetsockoptInt( int(fd), unix.SOL_SOCKET, unix.SO_MARK, c.Config.Mark )
 				if err != nil { log.Println( "Dial: [ERR] Set mark failed:", err ) }
@@ -264,7 +265,7 @@ func ( c *Client ) GetAccessToken( ctx context.Context ) ( accessToken string, e
 
 func ( c *Client ) ApplyFilter( ctx context.Context ) ( err error ) {
 	if err = c.Config.Filter.Check(); err != nil { return }
-	response, err := c.postJson( ctx, "https://vpn.hide.me:4321/filter", c.Config.Filter )
+	response, err := c.postJson( ctx, "https://10.255.255.250:4321/filter", c.Config.Filter )
 	if string(response) == "false" { err = errors.New( "filter failed" ) }
 	return
 }
