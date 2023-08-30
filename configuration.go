@@ -93,6 +93,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.String	 ( "u",  c.Rest.Username, "hide.me `username`" )
 	flag.String	 ( "P",  c.Rest.Password, "hide.me `password`" )
 	flag.String	 ( "d",  c.Rest.DnsServers, "comma separated list of `DNS servers` used for client requests" )
+	flag.Bool	 ( "pf", c.Rest.PortForward.Enabled, "enable port-forwarding (uPnP and NAT-PMP)" )
 	
 	flag.Bool	 ( "forceDns",		c.Rest.Filter.ForceDns, "force tunneled DNS handling on hide.me servers" )										// Filtering related flags
 	flag.Bool	 ( "noAds",			c.Rest.Filter.Ads, "filter ads" )
@@ -149,6 +150,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 			case "u":				c.Rest.Username = f.Value.String()
 			case "P":				c.Rest.Password = f.Value.String()
 			case "d":				c.Rest.DnsServers = f.Value.String()
+			case "pf":			   	c.Rest.PortForward.Enabled = f.Value.String() == "true"
 			
 			case "forceDns":    	c.Rest.Filter.ForceDns = f.Value.String() == "true"																							// Filtering related flags
 			case "noAds":       	c.Rest.Filter.Ads = f.Value.String() == "true"

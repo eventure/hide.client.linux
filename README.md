@@ -226,6 +226,13 @@ Set the firewall mark the WireGuard kernel module will mark its packets with.
 ```
 Remote REST endpoint port may be changed with this option.
 ```
+  -pf
+    	enable dynamic port-forwarding technologies (uPnP and NAT-PMP)
+```
+Dynamic port-forwarding is, by default, disabled. Use this option to turn it on for a particular connection attempt.
+Alternatively, port-forwarding may be enabled by adding a **@pf** suffix to the username when requesting a token. Such tokens
+activate port-forwarding on each connection attempt, and you should not use this option when using them.   
+```
   -r table
     	routing table to use (default 55555)
 ```

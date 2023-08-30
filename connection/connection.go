@@ -183,6 +183,7 @@ func ( c *Connection ) Connect() ( err error ) {
 	
 	go c.AccessTokenRefresh()																													// Refresh the Access-Token when required
 	go c.Filter()																																// Apply possible filters
+	go c.PortForward()																															// Activate port-forwarding
 	c.state.Code = Connected																													// Connection is running now so set state to connected
 	return
 }
@@ -235,6 +236,17 @@ func ( c *Connection ) Filter() {
 		default:  log.Println( "Fltr: Filters (", c.restClient.Config.Filter.String(), ") have not been applied:", err )
 	}
 }
+
+func ( c *Connection ) PortForward() {
+	if !c.restClient.Config.PortForward.Enabled { return }
+	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
+	defer cancel()
+	switch err := c.restClient.EnablePortForwarding( ctx ); err {
+		case nil: log.Println( "PFwd: Port-Forwarding enabled" )
+		default:  log.Println( "PFwd: Port-Forwarding has not been enabled:", err )
+	}
+}
+
 
 func ( c *Connection ) DPD() {
 	c.dpdTimer.Reset( c.link.Config.DpdTimeout )
