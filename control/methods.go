@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 )
 
@@ -121,11 +122,18 @@ func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 }
 
 func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	writer.Header().Add( "content-type", "application/json" )
-	switch accessToken, err := s.connection.AccessTokenFetch(); err {
-		case nil: writer.Write( Result{ Result: accessToken }.Json() )
-		default:  writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json())
+	switch request.Method {
+		case "DELETE":
+			writer.Header().Add( "content-type", "application/json" )
+			writer.Write( Result{ Result: os.Remove( s.connection.Config.Rest.AccessTokenPath ) }.Json() )
+		case "GET":
+			writer.Header().Add( "content-type", "application/json" )
+			switch accessToken, err := s.connection.AccessTokenFetch(); err {
+				case nil: writer.Write( Result{ Result: accessToken }.Json() )
+				default:  writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json())
+			}
+		default:
+			http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return
 	}
 	return
 }
