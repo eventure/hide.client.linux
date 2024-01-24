@@ -75,7 +75,7 @@ func ( c *Configuration ) Store( fileName string ) ( err error ) {
 }
 
 func ( c *Configuration ) Print() {
-	if out, err := yaml.Marshal( c ); err != nil { log.Println( err ) } else { log.Print( string( out ) ) }
+	if out, err := yaml.Marshal( c ); err != nil { log.Println( err ) } else { fmt.Print( string( out ) ) }
 	return
 }
 
