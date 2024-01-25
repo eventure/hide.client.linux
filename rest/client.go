@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -25,10 +26,12 @@ import (
 const userAgent = "HIDE.ME.LINUX.CLI-0.9.8"
 
 var ErrAppUpdateRequired = errors.New( "application update required" )
-var ErrHttpStatusBad = errors.New( "bad HTTP status" )
 var ErrBadPin = errors.New( "bad public key PIN" )
 var ErrMissingHost = errors.New( "missing host" )
 var ErrBadDomain = errors.New( "bad domain ")
+
+type ErrHttpStatus int
+func ( e ErrHttpStatus ) Error() string { return "bad HTTP status " + strconv.Itoa( int( e ) ) }
 
 type Config struct {
 	APIVersion				string			`yaml:"-"`										// Current API version is 1.0.0
@@ -176,7 +179,7 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 	if err != nil { return }
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusForbidden { log.Println( "Rest: [ERR] Application update required" ); return nil, ErrAppUpdateRequired }
-	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
+	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatus( response.StatusCode ); return }
 	return io.ReadAll( response.Body )
 }
 
@@ -187,7 +190,7 @@ func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte,
 	response, err := c.client.Do( request )
 	if err != nil { return }
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatusBad; return }
+	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatus( response.StatusCode ); return }
 	return io.ReadAll( response.Body )
 }
 

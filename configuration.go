@@ -26,7 +26,7 @@ func NewConfiguration() *Configuration {
 		WireGuard: &wireguard.Config{
 			Name:					"vpn",										// command line option "-i"
 			ListenPort:				0,											// command line option "-l"
-			Mark:					55555,										// command line option "-m"
+			Mark:					0,											// command line option "-m"
 			RoutingTable:			55555,										// command line option "-r"
 			RPDBPriority:			10,											// command line option "-R"
 			LeakProtection:			true,										// command line option "-k"
@@ -48,7 +48,7 @@ func NewConfiguration() *Configuration {
 			RestTimeout:	 		10 * time.Second,							// Only configurable through the config file
 			ReconnectWait:	 		30 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
-			Mark:					55555,										// command line option "-m"
+			Mark:					0,											// command line option "-m"
 			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"
 		},
 		Control: &control.Config{

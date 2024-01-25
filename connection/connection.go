@@ -110,9 +110,10 @@ func ( c *Connection ) Connect() ( err error ) {
 	defer func() {
 		switch err {
 			case nil, context.Canceled: break																									// No error (successful connection) or a cancelled context (interrupted connection attempt) may not cause a reconnect
-			case rest.ErrHttpStatusBad, rest.ErrAppUpdateRequired, rest.ErrBadPin, rest.ErrMissingHost: c.Disconnect(); break					// These errors are fatal, do not reconnect
+			case rest.ErrAppUpdateRequired, rest.ErrBadPin, rest.ErrMissingHost: c.Disconnect(); break											// These errors are fatal, do not reconnect
 			default:
 				c.Disconnect()
+				if _, ok := err.(rest.ErrHttpStatus); ok { break }																			// Do not try to reconnect on HTTP status errors
 				if _, ok := err.(*net.DNSError); ok { break }																					// Do not try to reconnect on DNS errors
 				c.ScheduleConnect( c.restClient.Config.ReconnectWait )
 		}
