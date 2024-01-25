@@ -16,6 +16,7 @@ type Config struct {
 	Address				string		`json:"address,omitempty"`			// Address ( IPv4, IPv6, path or an abstract socket ) the control server should listen on
 	Certificate			string		`json:"certificate,omitempty"`		// Certificate file path
 	Key					string		`json:"key,omitempty"`				// Key file path
+	LineLogBufferSize	int			`json:"logBufferSize,omitempty"`	// Turns line log buffering on when larger than 0, affects only service mode
 }
 
 type Server struct {
@@ -47,7 +48,14 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/state", s.state )
 	mux.HandleFunc( "/watch", s.watch )
 	mux.HandleFunc( "/token", s.token )
+	mux.HandleFunc( "/log", s.log )
 	s.server = &http.Server{ Handler: mux, ReadHeaderTimeout: time.Second * 5 }
+	
+	if s.Config.LineLogBufferSize > 0 {
+		log.SetFlags( log.LUTC | log.Ldate | log.Ltime )
+		log.SetOutput( NewRingLog( s.Config.LineLogBufferSize, log.Writer() ) )
+	}
+	
 	
 	if supported, err := daemon.SdNotify( false, daemon.SdNotifyReady ); supported && err != nil {														// Send SystemD ready notification
 		log.Println( "Init: [ERR] SystemD notification failed:", err )

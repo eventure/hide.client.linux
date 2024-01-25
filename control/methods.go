@@ -137,3 +137,16 @@ func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
 	}
 	return
 }
+
+func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
+	logs := []byte( nil )
+	if ringLog, ok := log.Writer().( *RingLog ); ok { logs = ringLog.Dump() }
+	switch request.Method {
+		case "GET":
+			writer.Header().Add( "content-type", "text/plain" )
+			writer.Write( logs )
+		default:
+			http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return
+	}
+	return
+}

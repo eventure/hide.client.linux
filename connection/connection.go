@@ -113,7 +113,7 @@ func ( c *Connection ) Connect() ( err error ) {
 			case rest.ErrAppUpdateRequired, rest.ErrBadPin, rest.ErrMissingHost: c.Disconnect(); break											// These errors are fatal, do not reconnect
 			default:
 				c.Disconnect()
-				if _, ok := err.(rest.ErrHttpStatus); ok { break }																			// Do not try to reconnect on HTTP status errors
+				if _, ok := err.(rest.ErrHttpStatus); ok { break }																				// Do not try to reconnect on HTTP status errors
 				if _, ok := err.(*net.DNSError); ok { break }																					// Do not try to reconnect on DNS errors
 				c.ScheduleConnect( c.restClient.Config.ReconnectWait )
 		}

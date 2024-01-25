@@ -52,7 +52,8 @@ func NewConfiguration() *Configuration {
 			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"
 		},
 		Control: &control.Config{
-			Address:				"@hide.me",									// command line option "-ctl"
+			Address:				"@hide.me",									// command line option "-caddr"
+			LineLogBufferSize:		65535,										// command like option "-cllbs". Log buffer will remember 65536 log lines, when set to 0 there will be no buffering
 		},
 	}
 	return h
@@ -123,6 +124,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.String  ( "caddr", c.Control.Address, "Control interface listen `address`" )																// Control interface related flags
 	flag.String  ( "ccert", c.Control.Certificate, "Control interface `certificate` file" )
 	flag.String  ( "ckey",  c.Control.Key, "Control interface `key` file" )
+	flag.Int	 ( "cllbs",  c.Control.LineLogBufferSize, "Control interface line log buffer `size`" )
 	
 	flag.Usage = func() {
 		_, _ = fmt.Fprint( os.Stderr, "Usage:\n  ", os.Args[0], " [options...] <command> [host]\n\n" )
@@ -181,6 +183,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 			case "caddr":			c.Control.Address = f.Value.String()																										// Control interface related flags
 			case "ccert":			c.Control.Certificate = f.Value.String()
 			case "ckey":			c.Control.Key = f.Value.String()
+			case "cllbs":			c.Control.LineLogBufferSize, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: LineLogBufferSize malformed" ) }
 		}
 		if err != nil { return }
 	})
