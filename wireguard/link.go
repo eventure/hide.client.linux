@@ -7,6 +7,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"log"
+	"net"
 	"time"
 )
 
@@ -43,6 +44,7 @@ type Link struct {
 	
 	peer			wgtypes.PeerConfig
 	
+	ips				[]net.IP
 	routes			[]*netlink.Route																														// Unfortunately, the netlink library can't list routes in the routing tables ...
 	gatewayRoutes	[]*netlink.Route																														// ... other than "main"
 	loopbackRoutes	[]*netlink.Route
@@ -84,7 +86,7 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 	if err = l.wgAddPeer( response.PublicKey, response.PresharedKey, response.Endpoint, response.PersistentKeepaliveInterval ); err != nil { return }		// Add a wireguard peer
 	l.stack = append( l.stack, l.wgRemovePeer )
 	if err = l.ipAddrsAdd( response.AllowedIps ); err != nil { l.Down(); return }																			// Add the IP addresses to the wireguard device
-	l.stack = append( l.stack, l.ipAddrsFlush )
+	l.stack = append( l.stack, l.ipAddrsDel )
 	if err = l.ipRoutesAdd( response ); err != nil { l.Down(); return }																						// Add the default routes over the wireguard interface
 	l.stack = append( l.stack, l.ipRoutesRemove )
 	if err = l.dnsSet( response.DNS ); err != nil { l.Down(); return }																						// Set the DNS
