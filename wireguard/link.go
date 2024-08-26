@@ -78,10 +78,10 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 	defer func() { if err != nil { l.Down() } }()
 	// Avoid fragmentation if possible, set a small MTU
 	// On IPv4, DS-Lite carrier connection takes MTU down as low as 1452 bytes
-	// On IPv6, assume the lowest Internet IPv6 MTU of 1280 bytes
+	// On IPv6, we can't go below 1280 as the lowest Internet IPv6 MTU is 1280 bytes
 	// IPv4 header is 20 bytes, IPv6 header is 40 bytes and UDP header is 8 bytes
 	// Wireguard overhead is 32 bytes
-	if response.Endpoint.IP.To4() == nil { l.mtu = 1280 - 80 } else { l.mtu = 1452 - 60 }																	// Calculate MTU according to the carrier connection protocol
+	if response.Endpoint.IP.To4() == nil { l.mtu = 1360 - 80 } else { l.mtu = 1452 - 60 }																	// Calculate MTU according to the carrier connection protocol
 	if err = l.ipLinkSetMtu(); err != nil { return }																										// Set the wireguard interface MTU
 	if err = l.wgAddPeer( response.PublicKey, response.PresharedKey, response.Endpoint, response.PersistentKeepaliveInterval ); err != nil { return }		// Add a wireguard peer
 	l.stack = append( l.stack, l.wgRemovePeer )

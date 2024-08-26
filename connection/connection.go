@@ -186,6 +186,7 @@ func ( c *Connection ) Connect() ( err error ) {
 	go c.Filter()																																// Apply possible filters
 	go c.PortForward()																															// Activate port-forwarding
 	c.state.Code = Connected																													// Connection is running now so set state to connected
+	if c.stateNotify != nil { c.stateNotify( c.state ) }
 	return
 }
 
