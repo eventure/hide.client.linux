@@ -9,7 +9,7 @@ curl -s -X POST --abstract-unix-socket hide.me http://localhost/configuration --
 printf "\nState: "
 curl -s --abstract-unix-socket hide.me http://localhost/state
 
-printf "\Route: "
+printf "\nRoute: "
 curl -s --abstract-unix-socket hide.me http://localhost/route
 printf "\nState: "
 curl -s --abstract-unix-socket hide.me http://localhost/state

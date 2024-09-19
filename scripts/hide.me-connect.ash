@@ -22,6 +22,9 @@ function generateKeys() {
 }
 
 function connect() {
+    serverIP=$(dig -t A ${HIDE_ME_SERVER}.hideservers.net +short)
+    serverEndpoint=${serverIP}":432"
+    echo "Resolved "${HIDE_ME_SERVER}" to "${serverIP}
     url="https://${HIDE_ME_SERVER}.hideservers.net:432/v1.0.0/connect"
     accessToken=$(cat ${HIDE_ME_TOKEN_FILE})
     data='{
@@ -31,14 +34,12 @@ function connect() {
       "publicKey":"'${pubKey}'"
     }'
     echo "Invoking ${url}"
-    jsonConf=$(curl --cacert CA.pem -s -f -X POST --data-binary "${data}" "${url}")
+    jsonConf=$(curl --connect-to ${HIDE_ME_SERVER}.hideservers.net:432:${serverIP}:432 --cacert CA.pem -s -f -X POST --data-binary "${data}" "${url}")
     returnValue=$?
     if [[ ${returnValue} != 0 ]]; then echo "cURL failed with "${returnValue}; exit 1; fi
     if [[ ${#jsonConf} == 0 ]]; then echo "Authentication failed"; exit 1; fi
 
     serverPublicKey=$(echo "${jsonConf}" | jq -r '.publicKey')
-    serverIP=$(echo "${jsonConf}" | jq -r '.endpoint.IP')
-    serverEndpoint=$(echo "${jsonConf}" | jq -r '.endpoint.IP+":"+(.endpoint.Port|tostring)')
     presharedKey=$(echo "${jsonConf}" | jq -r '.presharedKey')
     persistentKeepalive=$(echo "${jsonConf}" | jq -r '(.persistentKeepalive/1000000000)')
     allowedIp1=$(echo "${jsonConf}" | jq -r '(.allowedIps[0])')
