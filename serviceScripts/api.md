@@ -30,12 +30,11 @@ Init: Starting HTTP server on 127.0.0.1:5050
 [completeAccessTokenExample.sh](completeAccessTokenExample.sh) provide a complete solution for connecting and obtaining the access-token.
 
 ## How does it work ?
-The client needs to be configured first. Configuration must be provided through the API interface. Then you route, connect, disconnect,
-destroy, ask for a token or watch for events.
+Before connecting or requesting an Access-Token, the client needs to be configured first. Configuration must be provided through the API
+interface. Only then access-token, route, connect, disconnect, destroy, watch or logs requests can be made.
 
-Every REST call is a simple HTTP GET call except for the configuration POST call.
-POST calls return a JSON response object (JSON-RPC 2.0 style, without the Id attribute as it is not required). Check
-https://www.jsonrpc.org/specification section 5.
+Every REST call is a simple HTTP GET call except for the configuration POST call. Most of the calls return a JSON response object
+(JSON-RPC 2.0 style, without the Id attribute as it is not required). Check https://www.jsonrpc.org/specification section 5.
 
 ### Configuration
 ```
@@ -79,11 +78,11 @@ fetches the current configuration:
 }
 ```
 Any attribute may be changed. Host attribute is mandatory and has to be set. Other attributes may be left at their default values.
-Once satisfied, send the configuration to the service:
+Once satisfied, send configuration to the service:
 ```
 curl -s -X POST --abstract-unix-socket hide.me http://localhost/configuration --data @configuration.json
 ```
-On a side-note, you do not need to send the whole configuration, only the changed attributes. For instance, for the purposes of connecting to hide.me
+You do not need to send the whole configuration, but only the changed attributes. For instance, for the purposes of connecting to hide.me
 it is enough to send the Host attribute, so the JSON might be as simple as:
 ```
 {
@@ -92,10 +91,32 @@ it is enough to send the Host attribute, so the JSON might be as simple as:
   }
 }
 ```
+For issuing an Access-Token the JSON might look like:
+```
+{
+  "Rest": {
+    "Host": "nl.hideservers.net",
+    "Username": "USERNAME",
+    "Password": "PASSWORD"
+  }
+}
+```
 Service responds with:
 ```
 {"result":true}
 ```
+
+### Access-Token
+In order to fetch an Access-Token the client must be configured with a hostname, username and a password, just like outlined above. It
+is a matter of issuing:
+```
+curl -s --abstract-unix-socket hide.me http://localhost/token
+```
+A successful response will return an object which contains a token:
+```
+{"result":"token_base64_here"}
+```
+Also, the token will be stored in the file specified by AccessTokenPath attribute.
 
 ### Routing
 When started in service mode hide.me CLI won't create a WireGuard interface, won't apply any settings or routing. It has to be instructed
