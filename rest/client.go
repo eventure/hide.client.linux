@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-const userAgent = "HIDE.ME.LINUX.CLI-0.9.8"
+const userAgent = "HIDE.ME.LINUX.CLI-0.9.10"
 
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrBadPin = errors.New( "bad public key PIN" )

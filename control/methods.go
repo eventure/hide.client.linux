@@ -25,6 +25,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			encoder := json.NewEncoder( writer )
 			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configure failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
+			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationGet})
 		case "POST":
 			decoder := json.NewDecoder( io.LimitReader( request.Body, 8192 ) )
 			if err := decoder.Decode( s.connection.Config ); err != nil {
@@ -36,6 +37,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			log.Println( "Serv: Configured from", request.RemoteAddr )
 			writer.WriteHeader( http.StatusOK )
 			writer.Write( Result{ Result: true }.Json() )
+			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationSet})
 		default: http.Error( writer, "not found", http.StatusNotFound )
 	}
 }
@@ -145,6 +147,7 @@ func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
 		case "GET":
 			writer.Header().Add( "content-type", "text/plain" )
 			writer.Write( logs )
+			s.connection.StateNotify( &connection.State{Code: connection.LogDump})
 		default:
 			http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return
 	}

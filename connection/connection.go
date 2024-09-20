@@ -18,6 +18,12 @@ const (
 	Routed = "routed"
 	Connecting = "connecting"
 	Connected = "connected"
+	TokenUpdate = "token update"
+	ConfigurationGet = "configuration get"
+	ConfigurationSet = "configuration set"
+	LogDump = "logs dumped"
+	Disconnecting = "disconnecting"
+	DpdTimeout = "dpd timeout"
 )
 
 type State struct {
@@ -25,7 +31,6 @@ type State struct {
 	*rest.ConnectResponse		`json:",omitempty"`
 	Rx				int64		`json:"rx,omitempty"`
 	Tx				int64		`json:"tx,omitempty"`
-	AccessToken		string		`json:"accessToken,omitempty"`
 }
 
 type Config struct {
@@ -62,6 +67,7 @@ func ( c *Connection ) Code() ( code string ) { c.Lock(); code = c.state.Code; c
 func ( c *Connection ) NotifySystemd( notifySystemd bool ) { c.notifySystemd = notifySystemd }
 func ( c *Connection ) SetConnectNotify( connectNotify func(err error) ) { c.Lock(); c.connectNotify = connectNotify; c.Unlock() }
 func ( c *Connection ) SetStateNotify( StateNotify func(state *State) ) { c.Lock(); c.stateNotify = StateNotify; c.Unlock() }
+func ( c *Connection ) StateNotify( state *State ) { if c.stateNotify == nil { return }; c.stateNotify( state ) }
 
 func ( c *Connection ) Init() ( err error ) {
 	defer func() { if err != nil { c.Shutdown() } } ()																							// If anything fails, undo changes
@@ -90,19 +96,19 @@ func ( c *Connection ) Init() ( err error ) {
 	if err != nil { log.Println( "Init: [ERR] RPDB rules failed:", err ); return }
 	
 	c.state.Code = Routed																														// Set state to routed
-	if c.stateNotify != nil { c.stateNotify( c.state ) }
+	c.StateNotify( c.state )
 	log.Println( "Init: Done" )
 	return
 }
 
-func ( c *Connection ) Shutdown() { c.Lock(); for i := len( c.initStack )-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.state.Code = Clean; if c.stateNotify != nil { c.stateNotify( c.state ) }; c.Unlock() }
+func ( c *Connection ) Shutdown() { c.Lock(); for i := len( c.initStack )-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.state.Code = Clean; c.StateNotify( c.state ); c.Unlock() }
 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
 	c.Lock(); defer c.Unlock()
 	if c.connectTimer != nil { c.connectTimer.Stop() }
 	c.connectTimer = time.AfterFunc( in, func() { _ = c.Connect() } )
 	c.state.Code = Connecting																													// Set state to connecting
-	if c.stateNotify != nil { c.stateNotify( c.state ) }
+	c.StateNotify( c.state )
 	log.Println( "Conn: Connecting in", in )
 }
 
@@ -118,7 +124,7 @@ func ( c *Connection ) Connect() ( err error ) {
 				c.ScheduleConnect( c.restClient.Config.ReconnectWait )
 		}
 		if c.connectNotify != nil { c.connectNotify( err ); c.connectNotify = nil }
-		if c.stateNotify != nil { c.stateNotify( c.state ) }
+		c.StateNotify( c.state )
 	}()
 	
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
@@ -191,6 +197,7 @@ func ( c *Connection ) Connect() ( err error ) {
 
 func ( c *Connection ) Disconnect() {
 	c.Lock()
+	c.StateNotify( &State{ Code: Disconnecting } )
 	if c.connectTimer != nil { c.connectTimer.Stop(); c.connectTimer = nil }																	// Stop a possible scheduled connect
 	if c.connectCancel != nil { c.connectCancel() }																								// Stop a possible concurrent connect
 	for i := len( c.connectStack )-1; i >= 0; i-- { c.connectStack[i]() }
@@ -198,7 +205,7 @@ func ( c *Connection ) Disconnect() {
 	c.state.ConnectResponse = nil
 	c.state.Rx,c.state.Tx = 0, 0
 	c.state.Code = Routed																														// Set state to routed
-	if c.stateNotify != nil { c.stateNotify( c.state ) }
+	c.StateNotify( c.state )
 	c.Unlock()
 }
 
@@ -209,22 +216,22 @@ func ( c *Connection ) AccessTokenRefresh() {
 	time.AfterFunc( c.restClient.Config.AccessTokenUpdateDelay, func() {
 		ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 		defer cancel()
-		var err error
-		if c.state.AccessToken, err = c.restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcRe: [ERR] Access-Token update failed:", err ); return }
+		if accessToken, err := c.restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcRe: [ERR] Access-Token update failed:", err ); return } else { c.Config.Rest.AccessToken = accessToken }
 		log.Println( "AcRe: Access-Token updated" )
-		if c.stateNotify != nil { c.stateNotify( c.state ) }
+		c.StateNotify( &State{ Code: TokenUpdate } )
 	})
 }
 
 func ( c *Connection ) AccessTokenFetch() ( accessToken string, err error ) {
 	restClient := rest.New( c.Config.Rest )
-	restClient.Init()
+	if err = restClient.Init(); err != nil { log.Println( "AcFe: REST client failed:", err ); return }
 	ctx, cancel := context.WithTimeout( context.Background(), c.Config.Rest.RestTimeout )
 	defer cancel()
 	if err = restClient.Resolve( ctx ); err != nil {  log.Println( "AcFe: [ERR] Access-Token fetch ( resolve ) failed:", err ); return }
 	if accessToken, err = restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcFe: [ERR] Access-Token fetch failed:", err ); return }
-	c.state.AccessToken = accessToken
+	c.Config.Rest.AccessToken = accessToken
 	log.Println( "AcFe: Access-Token updated" )
+	c.StateNotify( &State{ Code: TokenUpdate } )
 	return
 }
 
@@ -253,6 +260,12 @@ func ( c *Connection ) DPD() {
 	c.dpdTimer.Reset( c.link.Config.DpdTimeout )
 	currentRx, err := c.link.GetRx()
 	if err != nil { log.Println( "DPD: Failed:", err.Error() ); c.Disconnect(); c.Shutdown(); return }
-	if currentRx == c.lastRx { log.Println( "DPD: Timeout" ); c.lastRx = 0; c.Disconnect(); c.ScheduleConnect( c.restClient.Config.ReconnectWait ) }
+	if currentRx == c.lastRx {
+		log.Println( "DPD: Timeout" );
+		c.lastRx = 0;
+		c.StateNotify( &State{Code: DpdTimeout})
+		c.Disconnect();
+		c.ScheduleConnect( c.restClient.Config.ReconnectWait )
+	}
 	c.lastRx = currentRx
 }

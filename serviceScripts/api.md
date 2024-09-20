@@ -1,42 +1,59 @@
 # Hide.me CLI VPN client for Linux REST API
-Hide.me CLI provides a RESTful control interface (API) when ran in the service mode. API can be used to completely control and monitor the
-client
+The Hide.me CLI offers a RESTful control interface (API) when running in service mode. This API allows for full control and monitoring
+of the client, providing an efficient way to manage operations programmatically.
 
 ## Preparation
-Download the latest release from [releases](https://github.com/eventure/hide.client.linux/releases). Unpack it, there's no need to install it
-yet.
+1. Download the latest release from the [releases page](https://github.com/eventure/hide.client.linux/releases).
+2. Unpack the downloaded file — installation is not required at this stage.
 
-Start hide.me like this:
+To start the `hide.me` service, run the following command:
 ```
 ./hide.me service
 ```
-
-The output should be like:
+The expected output should be:
 ```
 Init: Starting HTTP server on @hide.me
 ```
-By default, hide.me binary listens on a UNIX socket in the abstract namespace called hide.me for HTTP (not HTTPS) requests. Alternatively,
-one could specify the exact listener socket address:
+If not configured otherwise, hide.me client listens on a UNIX socket in the abstract namespace for HTTP requests. The socket is named
+@hide.me.
+
+### Changing the Listener Address
+You can modify the listener's address using the --caddr option. For example, to bind hide.me CLI to a TCP port:
 ```
 ./hideGuard --caddr 127.0.0.1:5050 service
 ```
-hide.me would listen on a TCP port then:
+The output would then be:
 ```
 Init: Starting HTTP server on 127.0.0.1:5050
 ```
 
-[serviceScripts](../serviceScripts) folder contains all the example cURLs one would ever need.
+### Examples
+The [serviceScripts](../serviceScripts) folder contains example shell scripts and cURL commands for interacting with the API.
 [completeConnectExample.sh](completeConnectExample.sh) and
 [completeAccessTokenExample.sh](completeAccessTokenExample.sh) provide a complete solution for connecting and obtaining the access-token.
 
-## How does it work ?
-Before connecting or requesting an Access-Token, the client needs to be configured first. Configuration must be provided through the API
-interface. Only then access-token, route, connect, disconnect, destroy, watch or logs requests can be made.
+## How does this all work ?
+Before connecting or requesting an Access Token, the client must be configured through the API interface. Configuration is a prerequisite
+for making any requests, such as:
 
-Every REST call is a simple HTTP GET call except for the configuration POST call. Most of the calls return a JSON response object
-(JSON-RPC 2.0 style, without the Id attribute as it is not required). Check https://www.jsonrpc.org/specification section 5.
+- Access Token retrieval
+- Route management
+- Connect or disconnect actions
+- Destroying sessions
+- Watching status
+- Viewing logs
+
+### REST API Structure
+
+- **Configuration**: The configuration is set using a HTTP `POST` request.
+- **Other Actions**: All other actions (like connecting or requesting logs) use simple HTTP `GET` requests.
+
+Most API calls return a JSON response object in a JSON-RPC 2.0 style (without the `Id` attribute, which is not required). For more details, refer to the [JSON-RPC 2.0 Specification, section 5](https://www.jsonrpc.org/specification#response_object).
 
 ### Configuration
+Configuring the client is the first step before making any API requests. The default configuration is mostly complete, with only the
+**`Hostname`** attribute needing to be set.
+Access-Token may be set directly through the AccessToken attribute or may be stored in a file at AccessTokenPath.
 ```
 curl -s -X GET --abstract-unix-socket hide.me http://localhost/configuration
 ```
@@ -77,13 +94,15 @@ fetches the current configuration:
   }
 }
 ```
-Any attribute may be changed. Host attribute is mandatory and has to be set. Other attributes may be left at their default values.
-Once satisfied, send configuration to the service:
+Any attribute in the client configuration can be modified as needed. For **Access Token** requests, both **`Username`** and **`Password`**
+must be set.<br>
+Once you've completed the configuration, send it to the service:
+
 ```
 curl -s -X POST --abstract-unix-socket hide.me http://localhost/configuration --data @configuration.json
 ```
-You do not need to send the whole configuration, but only the changed attributes. For instance, for the purposes of connecting to hide.me
-it is enough to send the Host attribute, so the JSON might be as simple as:
+Only the changed attributes need to be sent via a `POST` request. For example, if you're just connecting to `hide.me`, it's enough
+to update the **`Host`** attribute. The configuration JSON can be as simple as:
 ```
 {
   "Rest": {
@@ -91,7 +110,7 @@ it is enough to send the Host attribute, so the JSON might be as simple as:
   }
 }
 ```
-For issuing an Access-Token the JSON might look like:
+For issuing an Access-Token the configuration JSON might look like:
 ```
 {
   "Rest": {
@@ -107,16 +126,21 @@ Service responds with:
 ```
 
 ### Access-Token
-In order to fetch an Access-Token the client must be configured with a hostname, username and a password, just like outlined above. It
-is a matter of issuing:
+To fetch an Access Token, the client must be configured with the following attributes:
+
+- **Hostname**
+- **Username**
+- **Password**
+
+Once these attributes are set, you can retrieve the Access Token by issuing the following command:
 ```
 curl -s --abstract-unix-socket hide.me http://localhost/token
 ```
-A successful response will return an object which contains a token:
+A successful response will return an object which contains the issued token:
 ```
 {"result":"token_base64_here"}
 ```
-Also, the token will be stored in the file specified by AccessTokenPath attribute.
+The issued token will be stored in the runtime configuration and the filename specified by AccessTokenPath attribute (if any).  
 
 ### Routing
 When started in service mode hide.me CLI won't create a WireGuard interface, won't apply any settings or routing. It has to be instructed
@@ -189,9 +213,8 @@ If anything goes wrong, e.g. DNS lookup fails, the response will be a JSON-RPC e
     }
 }
 ```
-Once a successful connection establishment happens hide.me CLI remembers the remote endpoint IP. If any DNS errors happen while
-reconnecting hide.me CLI will reuse the remembered IP. This is a feature of our client, i.e. it needs to resolve an endpoint only
-once and will use the resolved IP for future connections if and when DNS starts to fail.
+Once a connection is successfully established, the `hide.me` CLI remembers the remote endpoint's IP address. If any DNS errors
+occur during reconnection attempts, the CLI will automatically reuse the remembered IP.
 
 ### Disconnect
 Disconnect is just as easy as connect:
