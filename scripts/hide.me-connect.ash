@@ -23,7 +23,7 @@ function generateKeys() {
 
 function connect() {
     serverIP=$(dig -t A ${HIDE_ME_SERVER}.hideservers.net +short)
-    serverEndpoint=${serverIP}":432"
+    if [[ ${serverIP} == "" ]]; then echo "Resolve ${HIDE_ME_SERVER}.hideservers.net failed"; exit 1; fi
     echo "Resolved "${HIDE_ME_SERVER}" to "${serverIP}
     url="https://${HIDE_ME_SERVER}.hideservers.net:432/v1.0.0/connect"
     accessToken=$(cat ${HIDE_ME_TOKEN_FILE})
@@ -34,7 +34,7 @@ function connect() {
       "publicKey":"'${pubKey}'"
     }'
     echo "Invoking ${url}"
-    jsonConf=$(curl --connect-to ${HIDE_ME_SERVER}.hideservers.net:432:${serverIP}:432 --cacert CA.pem -s -f -X POST --data-binary "${data}" "${url}")
+    jsonConf=$(curl --resolve ${HIDE_ME_SERVER}.hideservers.net:432:${serverIP} --cacert CA.pem -s -f -X POST --data-binary "${data}" "${url}")
     returnValue=$?
     if [[ ${returnValue} != 0 ]]; then echo "cURL failed with "${returnValue}; exit 1; fi
     if [[ ${#jsonConf} == 0 ]]; then echo "Authentication failed"; exit 1; fi
@@ -49,14 +49,17 @@ function connect() {
     gatewayIp1=$(echo "${jsonConf}" | jq -r '(.gateway[0])')
     gatewayIp2=$(echo "${jsonConf}" | jq -r '(.gateway[1])')
     sessionToken=$(echo "${jsonConf}" | jq -r '.sessionToken')
+    serverEndpoint=${serverIP}":"$(echo "${jsonConf}" | jq -r '.endpoint.Port')
 
+    echo -n -e '\033[1m'
     echo "Server public key: "${serverPublicKey}
-    echo "Server address: "${serverEndpoint}
+    echo "Server endpoint: "${serverEndpoint}
     echo "Persistent keepalive: "${persistentKeepalive}" seconds"
     echo "Local IPs: "${allowedIp1}", "${allowedIp2}
     echo "DNS servers: "${dnsIp1}", "${dnsIp2}
     echo "Gateways: "${gatewayIp1}", "${gatewayIp2}
     echo "Session Token: "${sessionToken}
+    echo -n -e '\033[0m'
 
     setConfFile="${HIDE_ME_CONF_PATH}/hide.me-wireguard-${HIDE_ME_DEV_NAME}"
     echo '[Interface]' > ${setConfFile}
@@ -69,7 +72,7 @@ function connect() {
     echo 'PersistentKeepalive = '${persistentKeepalive} >> ${setConfFile}
     echo '# SessionToken = '${sessionToken} >> ${setConfFile}
 
-    echo "Bringing ${HIDE_ME_DEV_NAME} interface up"
+    echo "Creating ${HIDE_ME_DEV_NAME} interface"
     ip link add ${HIDE_ME_DEV_NAME} type wireguard
     if [[ $? != 0 ]]; then echo "[FAIL] ip link add ${HIDE_ME_DEV_NAME} type wireguard"; exit 1; fi
     ip link set ${HIDE_ME_DEV_NAME} up
