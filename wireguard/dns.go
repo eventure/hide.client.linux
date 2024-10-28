@@ -20,7 +20,7 @@ func (l *Link) dnsSet( addrs []net.IP ) ( err error ) {
 		}
 	}
 
-	nameServers := "timeout 1\n"																														// Create new content
+	nameServers := "options timeout:1\n"																														// Create new content
 	for _, addr := range addrs { nameServers += "nameserver " + addr.String() + "\n" }
 	
 	if _, err = file.Seek( 0, unix.SEEK_SET ); err != nil { log.Println( "Link: [ERR] Seek in /etc/resolv.conf failed" ); return }						// Seek to start
