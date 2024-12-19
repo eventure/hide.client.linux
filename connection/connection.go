@@ -255,7 +255,6 @@ func ( c *Connection ) PortForward() {
 	}
 }
 
-
 func ( c *Connection ) DPD() {
 	c.dpdTimer.Reset( c.link.Config.DpdTimeout )
 	currentRx, err := c.link.GetRx()
