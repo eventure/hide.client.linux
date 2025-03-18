@@ -1,7 +1,6 @@
 module github.com/eventure/hide.client.linux
 
-go 1.21
-toolchain go1.23.7
+go 1.24.0
 
 require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf

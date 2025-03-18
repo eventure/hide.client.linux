@@ -16,11 +16,11 @@ func (l *Link) dnsSet( addrs []net.IP ) ( err error ) {
 	if len( l.Config.ResolvConfBackupFile ) > 0 {																										// Backup old resolv.conf if configured to do so
 		switch err = os.WriteFile( l.Config.ResolvConfBackupFile, l.resolvConf, 0644 ); err {
 			case nil: log.Println( "Link: resolv.conf backup in", l.Config.ResolvConfBackupFile )
-			default:  log.Println( "Link: [WARN] resolv.conf backup to", l.Config.ResolvConfBackupFile, "failed:", err.Error() )						// Backup may fai. The contents of the original resolv.conf are kept in l.resolvConf and can be restored
+			default:  log.Println( "Link: [WARN] resolv.conf backup to", l.Config.ResolvConfBackupFile, "failed:", err.Error() )						// Backup may fail. The contents of the original resolv.conf are kept in l.resolvConf and can be restored
 		}
 	}
 
-	nameServers := "options timeout:1\n"																														// Create new content
+	nameServers := "options timeout:1\n"																												// Create new content
 	for _, addr := range addrs { nameServers += "nameserver " + addr.String() + "\n" }
 	
 	if _, err = file.Seek( 0, unix.SEEK_SET ); err != nil { log.Println( "Link: [ERR] Seek in /etc/resolv.conf failed" ); return }						// Seek to start
