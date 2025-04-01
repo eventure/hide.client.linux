@@ -102,6 +102,7 @@ func ( c *Client ) Init() ( err error ) {
 		DisableKeepAlives:		true,
 		ResponseHeaderTimeout:	time.Second * 5,
 		ForceAttemptHTTP2:		true,
+		Protocols: 				&http.Protocols{},
 		TLSClientConfig: &tls.Config{
 			NextProtos:				[]string{ "h2" },
 			ServerName:				"hideservers.net",																								// hideservers.net is always a certificate SAN
@@ -109,6 +110,7 @@ func ( c *Client ) Init() ( err error ) {
 			VerifyPeerCertificate:	c.Pins,
 		},
 	}
+	transport.Protocols.SetHTTP2( true )
 	if len( c.Config.CA ) > 0 {
 		pem, err := os.ReadFile( c.Config.CA ); if err != nil { return err }
 		transport.TLSClientConfig.RootCAs = x509.NewCertPool()
