@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/eventure/hide.client.linux/control"
+	"github.com/eventure/hide.client.linux/resolvers/doh"
+	"github.com/eventure/hide.client.linux/resolvers/plain"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/eventure/hide.client.linux/wireguard"
 	"gopkg.in/yaml.v2"
@@ -19,6 +21,8 @@ type Configuration struct {
 	Rest		*rest.Config		`yaml:"client,omitempty" json:",omitempty"`
 	WireGuard	*wireguard.Config	`yaml:"link,omitempty" json:",omitempty"`
 	Control		*control.Config		`yaml:"control,omitempty" json:",omitempty"`
+	DoH			*doh.Config			`yaml:"doh,omitempty" json:",omitempty"`
+	Plain		*plain.Config		`yaml:"plain,omitempty" json:",omitempty"`
 }
 
 func NewConfiguration() *Configuration {
@@ -45,15 +49,44 @@ func NewConfiguration() *Configuration {
 			AccessTokenPath:		"accessToken.txt",							// command line option "-t"
 			Username:       		"",											// command line option "-u"
 			Password:				"",											// Only configurable through the config file
-			RestTimeout:	 		10 * time.Second,							// Only configurable through the config file
+			RestTimeout:	 		90 * time.Second,							// Only configurable through the config file
 			ReconnectWait:	 		30 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
 			Mark:					0,											// command line option "-m"
-			DnsServers:				"209.250.251.37:53,217.182.206.81:53",		// command line option "-d"
+			UseDoH:					true,										// command line option "-doh"
 		},
 		Control: &control.Config{
 			Address:				"@hide.me",									// command line option "-caddr"
 			LineLogBufferSize:		65535,										// command like option "-cllbs". Log buffer will remember 65536 log lines, when set to 0 there will be no buffering
+		},
+		DoH: &doh.Config {
+			Servers: []string{
+				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEwLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns10.quad9.net:443/dns-query 149.112.112.10:443
+				"sdns://AgYAAAAAAAAACDkuOS45LjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEwLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns10.quad9.net:443/dns-query 9.9.9.10:443
+				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEwLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns10.quad9.net:5053/dns-query 149.112.112.10:443
+				"sdns://AgYAAAAAAAAACDkuOS45LjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEwLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns10.quad9.net:5053/dns-query 9.9.9.10:443
+				"sdns://AgMAAAAAAAAADjE0OS4xMTIuMTEyLjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczExLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns11.quad9.net:443/dns-query 149.112.112.11:443
+				"sdns://AgMAAAAAAAAACDkuOS45LjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczExLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns11.quad9.net:443/dns-query 9.9.9.11:443
+				"sdns://AgMAAAAAAAAADjE0OS4xMTIuMTEyLjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczExLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns11.quad9.net:5053/dns-query 149.112.112.11:443
+				"sdns://AgMAAAAAAAAACDkuOS45LjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczExLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns11.quad9.net:5053/dns-query 9.9.9.11:443
+				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEyLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns12.quad9.net:443/dns-query 149.112.112.12:443
+				"sdns://AgYAAAAAAAAACDkuOS45LjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEyLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns12.quad9.net:443/dns-query 9.9.9.12:443
+				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEyLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns12.quad9.net:5053/dns-query 149.112.112.12:443
+				"sdns://AgYAAAAAAAAACDkuOS45LjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEyLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns12.quad9.net:5053/dns-query 9.9.9.12:443
+				"sdns://AgMAAAAAAAAADTE0OS4xMTIuMTEyLjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8SZG5zOS5xdWFkOS5uZXQ6NDQzCi9kbnMtcXVlcnk",			// dns9.quad9.net:443/dns-query 149.112.112.9:443
+				"sdns://AgMAAAAAAAAABzkuOS45LjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8SZG5zOS5xdWFkOS5uZXQ6NDQzCi9kbnMtcXVlcnk",					// dns9.quad9.net:443/dns-query 9.9.9.9:443
+				"sdns://AgMAAAAAAAAADTE0OS4xMTIuMTEyLjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8TZG5zOS5xdWFkOS5uZXQ6NTA1MwovZG5zLXF1ZXJ5",			// dns9.quad9.net:5053/dns-query 149.112.112.9:443
+				"sdns://AgMAAAAAAAAABzkuOS45LjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8TZG5zOS5xdWFkOS5uZXQ6NTA1MwovZG5zLXF1ZXJ5",					// dns9.quad9.net:5053/dns-query 9.9.9.9:443
+				"sdns://AgMAAAAAAAAADzE0OS4xMTIuMTEyLjExMiCwGSB0S7t2yasFPgHge34FDkc9IPefe-pDX6_kPJ0kLxFkbnMucXVhZDkubmV0OjQ0MwovZG5zLXF1ZXJ5",			// dns.quad9.net:443/dns-query 149.112.112.112:443
+				"sdns://AgMAAAAAAAAADzE0OS4xMTIuMTEyLjExMiCwGSB0S7t2yasFPgHge34FDkc9IPefe-pDX6_kPJ0kLxJkbnMucXVhZDkubmV0OjUwNTMKL2Rucy1xdWVyeQ",		// dns.quad9.net:5053/dns-query 149.112.112.112:443
+			},
+			UpdateURLs: []string{
+				"https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md",
+			},
+			Filename: "resolvers.txt",
+		},
+		Plain: &plain.Config{
+			Servers: []string{ "209.250.251.37:53", "217.182.206.81:53" },
 		},
 	}
 	return h
@@ -93,8 +126,10 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.String	 ( "t",  c.Rest.AccessTokenPath, "access token `filename`" )
 	flag.String	 ( "u",  c.Rest.Username, "hide.me `username`" )
 	flag.String	 ( "P",  c.Rest.Password, "hide.me `password`" )
-	flag.String	 ( "d",  c.Rest.DnsServers, "comma separated list of `DNS servers` used for client requests" )
 	flag.Bool	 ( "pf", c.Rest.PortForward.Enabled, "enable port-forwarding (uPnP and NAT-PMP)" )
+	
+	flag.String	 ( "d",   strings.Join(c.Plain.Servers, ","), "comma separated list of `DNS servers` used for client requests" )					// Resolvers related flags
+	flag.Bool	 ( "doh", c.Rest.UseDoH, "Use DNS-over-HTTPs" )
 	
 	flag.Bool	 ( "forceDns",		c.Rest.Filter.ForceDns, "force tunneled DNS handling on hide.me servers" )										// Filtering related flags
 	flag.Bool	 ( "noAds",			c.Rest.Filter.Ads, "filter ads" )
@@ -132,8 +167,11 @@ func ( c *Configuration ) Parse() ( err error ) {
 		_, _ = fmt.Fprint( os.Stderr, "  token - request an Access-Token (required for connect)\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  connect - connect to a vpn server\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  conf - generate a configuration file to be used with the -c option\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  categories - fetch and dump filtering category list\n\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  service - run in remotely controlled service mode\n\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  categories - fetch and dump filtering category list\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  service - run in remotely controlled service mode\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  updateDoh - update DNS-over-HTTPs server list\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  resolve - resolve host using DNS-over-HTTPs\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  lookup - resolve host using DNS\n" )
 		_, _ = fmt.Fprint( os.Stderr, "host:\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  fqdn, short name or an IP address of a hide.me server\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  Required when the configuration file does not contain it\n\n" )
@@ -151,9 +189,11 @@ func ( c *Configuration ) Parse() ( err error ) {
 			case "t":				c.Rest.AccessTokenPath = f.Value.String()
 			case "u":				c.Rest.Username = f.Value.String()
 			case "P":				c.Rest.Password = f.Value.String()
-			case "d":				c.Rest.DnsServers = f.Value.String()
 			case "pf":			   	c.Rest.PortForward.Enabled = f.Value.String() == "true"
-			
+		
+			case "d":				c.Plain.Servers = strings.Split( f.Value.String(), "," )																					// Resolvers related flags
+			case "doh":				if f.Value.String() == "false" { c.Rest.UseDoH = false }
+		
 			case "forceDns":    	c.Rest.Filter.ForceDns = f.Value.String() == "true"																							// Filtering related flags
 			case "noAds":       	c.Rest.Filter.Ads = f.Value.String() == "true"
 			case "noTrackers":  	c.Rest.Filter.Trackers = f.Value.String() == "true"

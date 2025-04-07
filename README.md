@@ -104,7 +104,7 @@ Usage:
 ...
 ```
 ### Commands
-hide.me CLI user interface is quite simple. There are just three commands available:
+hide.me CLI user interface is quite simple. There are just eight commands available:
 ```
 command:
   token - request an Access-Token (required for connect)
@@ -112,11 +112,13 @@ command:
   conf - generate a configuration file to be used with the -c option
   categories - fetch and dump filtering category list
   service - run in remotely controlled service mode
+  updateDoh - update DNS-over-HTTPs server list
+  resolve - resolve host using DNS-over-HTTPs
+  lookup - resolve host using DNS
 ```
-In order to connect to a VPN server an Access-Token must be requested from a VPN server. An Access-Token request is
-issued by the **token** command.
-An Access-Token issued by any server may be used, for authentication purposes, with any other hide.me VPN server.
-When a server issues an Access-Token that token must be stored in a file. Default filename for an Access-Token is
+To connect to a VPN server, an Access-Token must be requested from a VPN server. The **token** command issues an Access-Token request.
+An Access-Token issued by any server may be used, for authentication, with any other hide.me VPN server.
+When a server issues an Access-Token, that token must be stored in a file. The default filename for an Access-Token is
 "accessToken.txt".
 
 Once an Access-Token is in place it may be used for **connect** requests. Stale access tokens get updated automatically.
@@ -125,11 +127,11 @@ hide.me CLI does not necessarily have to be invoked with a bunch of command line
 configuration file may be used to specify all the options. To generate such a configuration file the **conf** command
 may be used.
 
-For the purposes of DNS filtering (SmartGuard), a list of filtering categories can be obtained with **categories** command
+For DNS filtering (SmartGuard), a list of filtering categories can be obtained with **categories** command
 
 hide.me CLI can be run in **service** mode. When started in service mode, hide.me CLI just exposes a REST interface for
 control. The controller is responsible for configuring connections, activation of the kill-switch or any other operation.
-REST interface listen address is configurable through -caddr option. 
+REST interface listen address is configurable through -caddr option.
 
 Note that there are a few options which are configurable only through the configuration file. Such options are:
 * Password - **DANGEROUS**, do not use this option unless you're aware of the security implications 
@@ -142,6 +144,34 @@ host:
 ```
 The hostname of a hide.me REST endpoint may be specified as a fully qualified domain name (nl.hide.me), short name (nl)
 or an IP address. There's no guarantee that the REST endpoint will match a WireGuard endpoint.
+
+#### DNS-over-HTTPS Implementation
+
+hide.me CLI prioritizes DNS-over-HTTPS (DoH) for secure DNS resolution before falling back to regular DNS. This approach significantly enhances privacy and security when resolving domain names.
+
+##### DoH Resolvers Management
+
+The system handles DoH resolvers in the following ways:
+
+- **Default Configuration**: Without a `resolvers.txt` file, the CLI relies on a small set of hardcoded DoH servers.
+  
+- **Enhanced Configuration**: The `updateDoh` command populates a `resolvers.txt` file with over 100 usable DoH servers.
+  
+- **Security by Randomization**: On each invocation, hide.me CLI automatically randomizes the order of DoH servers in the `resolvers.txt` file, ensuring that a different DoH server is used for each session.
+
+##### File Format
+
+The `resolvers.txt` file is a simple text file containing DNS stamps for each DoH server.
+
+#### Testing DNS Resolution
+
+hide.me CLI provides commands to test and compare different DNS resolution methods:
+
+- **`resolve` command**: Test DNS-over-HTTPS resolution for a specific hostname.
+  
+- **`lookup` command**: Issue a regular DNS request, useful for comparing DoH responses with traditional DNS responses.
+
+This approach not only secures DNS requests but distributes them across multiple providers, adding an additional layer of privacy protection to hide.me CLI's network operations.
 
 ### Options
 ```
@@ -194,11 +224,21 @@ Set the service mode control interface X509 certificate in PEM format
 ```
 Set the service mode control interface private key in PEM format
 ```
+  -cllbs size
+    	Control interface line log buffer size
+```
+Set the service mode control interface line log buffer size
+```
   -d DNS servers
     	comma separated list of DNS servers used for client requests (default "209.250.251.37:53,217.182.206.81:53")
 ```
-By default, Hide.me CLI uses hide.me operated DNS servers to resolve VPN server names when requesting a token or during
-connect requests. The set of DNS servers used for these purposes may be customized with this option.
+Hide.me CLI may use hide.me operated DNS servers to resolve VPN server names when requesting a token or during
+connect requests. The set of DNS servers used for these purposes may be customized with this option. Note that DoH resolution takes precedence unless disabled.
+```
+  -doh
+    	Use DNS-over-HTTPs
+```
+Hide.me CLI prioritizes DNS-over-HTTPs servers for DNS resolution purposes. This option disables DNS-over-HTTPs.
 ```
   -dpd duration
     	DPD timeout (default 1m0s)
@@ -211,13 +251,18 @@ the connection state. The checking period can be changed with this option, but c
 ```
 Use this option to specify the name of the networking interface to create or use.
 ```
+  -k
+    	enable/disable leak protection a.k.a. kill-switch
+```
+Enable/disable kill-switch. Enabled by default.
+```
   -l port
     	listen port
 ```
 Specify a listen port for encrypted WireGuard traffic.
 ```
   -m mark
-    	firewall mark for wireguard traffic (default 0 - no packet marks)
+    	firewall mark for wireguard and hide.me client originated traffic
 ```
 Set the firewall mark the WireGuard kernel module will mark its packets with.
 ```

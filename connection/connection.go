@@ -3,6 +3,8 @@ package connection
 import (
 	"context"
 	"github.com/coreos/go-systemd/daemon"
+	"github.com/eventure/hide.client.linux/resolvers/doh"
+	"github.com/eventure/hide.client.linux/resolvers/plain"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/eventure/hide.client.linux/wireguard"
 	"log"
@@ -36,6 +38,8 @@ type State struct {
 type Config struct {
 	Rest			*rest.Config
 	Wireguard		*wireguard.Config
+	DoH				*doh.Config
+	Plain			*plain.Config
 }
 
 type Connection struct {
@@ -44,6 +48,8 @@ type Connection struct {
 
 	restClient		*rest.Client
 	link			*wireguard.Link
+	dohResolver		*doh.Resolver
+	plainResolver	*plain.Resolver
 
 	initStack		[]func()
 	connectStack	[]func()
@@ -72,47 +78,56 @@ func ( c *Connection ) StateNotify( state *State ) { if c.stateNotify == nil { r
 func ( c *Connection ) Init() ( err error ) {
 	defer func() { if err != nil { c.Shutdown() } } ()																							// If anything fails, undo changes
 	c.Lock(); defer c.Unlock()
-	
-	c.restClient = rest.New( c.Config.Rest )
+
 	c.link = wireguard.New( c.Config.Wireguard )
-	
-	if err = c.restClient.Init(); err != nil { log.Println( "Init: [ERR] REST Client setup failed:", err ); return }							// Initialize the REST client
-	if !c.restClient.HaveAccessToken() { log.Println( "Init: [ERR] No Access-Token available" ); return }										// Access-Token is required for the Connect/Disconnect methods
-	
 	if err = c.link.Open(); err != nil { log.Println( "Init: [ERR] Wireguard open failed:", err ); return }										// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
 	c.initStack = append( c.initStack, c.link.Close )
-	
+
+	c.dohResolver = doh.New( c.Config.DoH )
+	c.dohResolver.Init()																														// Initialize DoHResolver
+	c.dohResolver.SetRouteOps( c.link )
+
+	c.plainResolver = plain.New( c.Config.Plain )
+	if err = c.plainResolver.Init(); err != nil { log.Println( "Init: [ERR] Plain resolver failed:", err ); return }
+	c.plainResolver.SetRouteOps( c.link )
+
 	_, dhcpDestination, _ := net.ParseCIDR( "255.255.255.255/32" )																				// IPv4 DHCP VPN bypass "throw" route
 	if err = c.link.ThrowRouteAdd( "DHCP bypass", dhcpDestination ); err != nil { log.Println( "Init: [ERR] DHCP bypass route failed:", err ); return }
 	c.initStack = append( c.initStack, func() { _ = c.link.ThrowRouteDel( "DHCP bypass", dhcpDestination ) } )
-	
+
 	if c.link.Config.LeakProtection {																											// Add the "loopback" default routes to the configured routing tables ( IP leak protection )
 		if err = c.link.LoopbackRoutesAdd(); err != nil { log.Println( "Init: [ERR] Addition of loopback routes failed:", err ); return }
 		c.initStack = append( c.initStack, c.link.LoopbackRoutesDel )
 	}
-	
+
 	err = c.link.RulesAdd()																														// Add the RPDB rules which direct traffic to configured routing tables
 	c.initStack = append( c.initStack, c.link.RulesDel )
 	if err != nil { log.Println( "Init: [ERR] RPDB rules failed:", err ); return }
-	
+
+	c.restClient = rest.New( c.Config.Rest )
+	if err = c.restClient.Init(); err != nil { log.Println( "Init: [ERR] REST Client setup failed:", err ); return }							// Initialize the REST client
+	if !c.restClient.HaveAccessToken() { log.Println( "Init: [ERR] No Access-Token available" ); return }										// Access-Token is required for the Connect/Disconnect methods
+	c.restClient.SetDohResolver( c.dohResolver )
+	c.restClient.SetPlainResolver( c.plainResolver )
+
 	c.state.Code = Routed																														// Set state to routed
 	c.StateNotify( c.state )
 	log.Println( "Init: Done" )
 	return
 }
 
-func ( c *Connection ) Shutdown() { c.Lock(); for i := len( c.initStack )-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.state.Code = Clean; c.StateNotify( c.state ); c.Unlock() }
+func ( c *Connection ) Shutdown() { c.Lock(); for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.state.Code = Clean; c.StateNotify( c.state ); c.Unlock() }
 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
 	c.Lock(); defer c.Unlock()
-	if c.connectTimer != nil { c.connectTimer.Stop() }
-	c.connectTimer = time.AfterFunc( in, func() { _ = c.Connect() } )
+	if c.connectTimer == nil { c.connectTimer = time.AfterFunc( in, c.Connect ) } else { c.connectTimer.Reset( in ) }
 	c.state.Code = Connecting																													// Set state to connecting
 	c.StateNotify( c.state )
 	log.Println( "Conn: Connecting in", in )
 }
 
-func ( c *Connection ) Connect() ( err error ) {
+func ( c *Connection ) Connect() {
+	var err error
 	defer func() {
 		switch err {
 			case nil, context.Canceled: break																									// No error (successful connection) or a cancelled context (interrupted connection attempt) may not cause a reconnect
@@ -130,22 +145,11 @@ func ( c *Connection ) Connect() ( err error ) {
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 	c.Lock(); c.connectCancel = cancel; c.Unlock()
 	
-	if c.link.Config.Mark == 0 {
-		var udpAddr *net.UDPAddr
-		for _, dnsServer := range strings.Split( c.restClient.Config.DnsServers, "," ) {														// throw routes for configured DNS servers ( only when marks are not being used )
-			if len( dnsServer ) == 0 { continue }
-			if udpAddr, err = net.ResolveUDPAddr( "udp", dnsServer ); err != nil { log.Println( "Init: [ERR] DNS server address resolve failed:", err ); return }
-			dns := wireguard.Ip2Net( udpAddr.IP )
-			if err = c.link.ThrowRouteAdd( "DNS server", dns  ); err != nil { log.Println( "Init: [ERR] Route DNS server failed:", err ); return }
-			c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "DNS server", dns ) } )
-		}
-	}
-	
 	for _, network := range strings.Split( c.link.Config.SplitTunnel, "," ) {																	// throw routes for split-tunnel destinations
 		if len( network ) == 0 { continue }
 		_, ipNet, err := net.ParseCIDR( network )
-		if err != nil { log.Println( "Init: [ERR] Parse split-tunnel route from", network, "failed:", err ); return err }
-		if err = c.link.ThrowRouteAdd( "Split-Tunnel", ipNet ); err != nil { log.Println( "Init: [ERR] Split-tunnel route to ", network, "failed:", err ); return err }
+		if err != nil { log.Println( "Init: [ERR] Parse split-tunnel route from", network, "failed:", err ); return }
+		if err = c.link.ThrowRouteAdd( "Split-Tunnel", ipNet ); err != nil { log.Println( "Init: [ERR] Split-tunnel route to ", network, "failed:", err ); return }
 		c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "Split-Tunnel", ipNet ) } )
 	}
 	
@@ -198,9 +202,9 @@ func ( c *Connection ) Connect() ( err error ) {
 func ( c *Connection ) Disconnect() {
 	c.Lock()
 	c.StateNotify( &State{ Code: Disconnecting } )
-	if c.connectTimer != nil { c.connectTimer.Stop(); c.connectTimer = nil }																	// Stop a possible scheduled connect
+	if c.connectTimer != nil { c.connectTimer.Stop() }																							// Stop a possible scheduled connect
 	if c.connectCancel != nil { c.connectCancel() }																								// Stop a possible concurrent connect
-	for i := len( c.connectStack )-1; i >= 0; i-- { c.connectStack[i]() }
+	for i := len(c.connectStack)-1; i >= 0; i-- { c.connectStack[i]() }
 	c.connectStack = c.connectStack[:0]
 	c.state.ConnectResponse = nil
 	c.state.Rx,c.state.Tx = 0, 0
