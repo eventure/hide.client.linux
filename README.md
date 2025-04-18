@@ -151,9 +151,9 @@ hide.me CLI prioritizes DNS-over-HTTPS (DoH) for secure DNS resolution before fa
 
 ##### DoH Resolvers Management
 
-The system handles DoH resolvers in the following ways:
+hide.me CLI handles DoH resolvers in the following ways:
 
-- **Default Configuration**: Without a `resolvers.txt` file, the CLI relies on a small set of hardcoded DoH servers.
+- **Default Configuration**: Without a `resolvers.txt` file, hide.me CLI relies on a small set of hardcoded DoH servers.
   
 - **Enhanced Configuration**: The `updateDoh` command populates a `resolvers.txt` file with over 100 usable DoH servers.
   

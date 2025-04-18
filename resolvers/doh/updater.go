@@ -55,7 +55,7 @@ func ( d *Resolver ) Update() ( err error ) {
 		
 		if file == nil {
 			if file, err = os.Create(d.Config.Filename); err != nil { log.Println( "dUpd: [ERR] Create", d.Config.Filename, "failed:", err ); return }
-			defer func() { log.Println( "dUpd: Resolvers stored to", d.Config.Filename ); _ = file.Close() } ()
+			defer func() { log.Println( "dUpd: Resolvers stored in", d.Config.Filename ); _ = file.Close() } ()
 		}
 		if _, err = io.Copy(file, response.Body); err != nil { log.Println( "dUpd: Write", d.Config.Filename, "failed:", err ); return }
 		if _, err = file.Write( []byte{'\n'} ); err != nil { log.Println( "dUpd: Write (newline)", d.Config.Filename, "failed:", err ); return }
