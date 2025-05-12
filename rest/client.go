@@ -285,6 +285,8 @@ func ( c *Client ) EnablePortForwarding( ctx context.Context ) ( err error ) {
 }
 
 func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
+	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
+	defer c.client.Transport.(*http.Transport).Protocols.SetHTTP1( false )
 	response, err := c.get( ctx, "https://" + c.remote.String() + "/categorization/categories.json" )
 	if err != nil { return }
 	
