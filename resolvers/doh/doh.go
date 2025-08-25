@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/jedisct1/go-dnsstamps"
-	"golang.org/x/net/dns/dnsmessage"
-	"golang.org/x/sys/unix"
 	"io"
 	"log"
 	"net"
@@ -15,6 +12,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	
+	"github.com/jedisct1/go-dnsstamps"
+	"golang.org/x/net/dns/dnsmessage"
+	"golang.org/x/sys/unix"
 )
 
 type RouteOps interface {
@@ -33,7 +34,7 @@ type Resolver struct {
 	dohServers	[]string
 	dialer		*net.Dialer
 	mark		int
-	routeOps	RouteOps
+	routeOps	RouteOps	// Routing subsystem interface
 }
 
 type DoHResponse struct {
@@ -76,9 +77,14 @@ func ( d *Resolver ) Init() {
 func ( d *Resolver ) createDnsMessage( name string, messageType dnsmessage.Type ) ( buf []byte, err error ) {
 	qname, err := dnsmessage.NewName(name)
 	if err != nil { return }
+	/* optRR := dnsmessage.Resource{
+		Header: dnsmessage.ResourceHeader{ Type: dnsmessage.TypeOPT, Class: 1280, Name: dnsmessage.MustNewName(".") },
+		Body:   &dnsmessage.OPTResource{},
+	} */
 	message := dnsmessage.Message{
-		Header:		dnsmessage.Header{ RecursionDesired: true },
-		Questions:	[]dnsmessage.Question{ { Name: qname, Type: messageType, Class: dnsmessage.ClassINET } },
+		Header:			dnsmessage.Header{ RecursionDesired: true },
+		Questions:		[]dnsmessage.Question{ { Name: qname, Type: messageType, Class: dnsmessage.ClassINET } },
+		// Additionals:	[]dnsmessage.Resource{optRR},
 	}
 	return message.Pack()
 }
