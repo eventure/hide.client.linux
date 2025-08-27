@@ -131,7 +131,7 @@ func ( c *Connection ) Connect() {
 	defer func() {
 		switch err {
 			case nil, context.Canceled: break																									// No error (successful connection) or a cancelled context (interrupted connection attempt) may not cause a reconnect
-			case rest.ErrAppUpdateRequired, rest.ErrBadPin, rest.ErrMissingHost: c.Disconnect(); break											// These errors are fatal, do not reconnect
+			case rest.ErrAppUpdateRequired, rest.ErrBadPin, rest.ErrMissingHost: c.Disconnect()													// These errors are fatal, do not reconnect
 			default:
 				c.Disconnect()
 				if _, ok := err.(rest.ErrHttpStatus); ok { break }																				// Do not try to reconnect on HTTP status errors
@@ -145,7 +145,7 @@ func ( c *Connection ) Connect() {
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 	c.Lock(); c.connectCancel = cancel; c.Unlock()
 	
-	for _, network := range strings.Split( c.link.Config.SplitTunnel, "," ) {																	// throw routes for split-tunnel destinations
+	for network := range strings.SplitSeq( c.link.Config.SplitTunnel, "," ) {																	// throw routes for split-tunnel destinations
 		if len( network ) == 0 { continue }
 		_, ipNet, err := net.ParseCIDR( network )
 		if err != nil { log.Println( "Init: [ERR] Parse split-tunnel route from", network, "failed:", err ); return }
@@ -196,7 +196,6 @@ func ( c *Connection ) Connect() {
 	go c.Filter()																																// Apply possible filters
 	go c.PortForward()																															// Activate port-forwarding
 	c.state.Code = Connected																													// Connection is running now so set state to connected
-	return
 }
 
 func ( c *Connection ) Disconnect() {

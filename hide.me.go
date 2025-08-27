@@ -2,16 +2,17 @@ package main
 
 import (
 	"context"
-	"flag"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/eventure/hide.client.linux/connection"
 	"github.com/eventure/hide.client.linux/control"
 	"github.com/eventure/hide.client.linux/resolvers/doh"
 	"github.com/eventure/hide.client.linux/resolvers/plain"
 	"github.com/eventure/hide.client.linux/rest"
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
+	flag "github.com/spf13/pflag"
 )
 
 // Get the Access-Token
@@ -58,14 +59,13 @@ func categories( conf *Configuration ) {
 	if err := client.Init(); err != nil { log.Println( "Main: [ERR] REST Client setup failed:", err ); return }
 	if err := client.Resolve( ctx ); err != nil { log.Println( "Main: [ERR] DNS failed:", err ); return }									// Resolve the REST endpoint
 	if err := client.FetchCategoryList( ctx ); err != nil { log.Println( "Main: [ERR] GET request failed:", err ); return }					// Get JSON
-	return
 }
 
 func main() {
 	log.SetFlags( 0 )
 	var err error
 	conf := NewConfiguration()																												// Parse the command line flags and optionally read the configuration file
-	if err = conf.Parse(); err != nil { log.Println( "Main: Configuration failed", err.Error() ); return }									// Exit on configuration error
+	if err = conf.Parse(); err != nil { log.Println( "Main: Configuration failed due to", err.Error() ); return }							// Exit on configuration error
 	
 	var c *connection.Connection
 	var controlServer *control.Server
@@ -116,8 +116,8 @@ func main() {
 		default: log.Println( "Main: Unsupported command", flag.Arg(0) ); flag.Usage(); return
 	}
 	
-	signalChannel := make ( chan os.Signal )																								// Signal handling
-	signal.Notify( signalChannel, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL )
+	signalChannel := make(chan os.Signal, 1)																								// Signal handling
+	signal.Notify( signalChannel, syscall.SIGINT, syscall.SIGTERM )
 	
 	for sig := range signalChannel {
 		switch sig {

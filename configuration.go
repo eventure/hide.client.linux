@@ -2,19 +2,20 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
+	"log"
+	"os"
+	"time"
+
+	flag "github.com/spf13/pflag"
+
 	"github.com/eventure/hide.client.linux/control"
 	"github.com/eventure/hide.client.linux/resolvers/doh"
 	"github.com/eventure/hide.client.linux/resolvers/plain"
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/eventure/hide.client.linux/wireguard"
 	"gopkg.in/yaml.v2"
-	"log"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type Configuration struct {
@@ -92,75 +93,53 @@ func NewConfiguration() *Configuration {
 	return h
 }
 
-func ( c *Configuration ) Read( fileName string ) ( err error ) {
-	if len( fileName ) == 0 { return }
-	bytes, err := os.ReadFile( fileName )
-	if err != nil { if pathErr, ok := err.(*os.PathError); ok { return pathErr.Unwrap() }; return }
-	if bytes[0] == '{' { err = json.Unmarshal( bytes, c ) } else { err = yaml.Unmarshal( bytes, c ) }
-	return
-}
-
-func ( c *Configuration ) Store( fileName string ) ( err error ) {
-	if len( fileName ) == 0 { return }
-	configurationYaml, err := yaml.Marshal( c )
-	if err != nil { return }
-	err = os.WriteFile(fileName, configurationYaml, 0400)
-	return
-}
-
-func ( c *Configuration ) Print() {
-	if out, err := yaml.Marshal( c ); err != nil { log.Println( err ) } else { fmt.Print( string( out ) ) }
-	return
-}
-
-func ( c *Configuration ) PrintJson() {
-	if out, err := json.MarshalIndent( c, "", "\t" ); err != nil { log.Println( err ) } else { log.Print( string( out ) ) }
-	return
-}
+func ( c *Configuration ) Print() { if out, err := yaml.Marshal( c ); err != nil { log.Println( err ) } else { fmt.Print( string( out ) ) } }
+func ( c *Configuration ) PrintJson() { if out, err := json.MarshalIndent( c, "", "\t" ); err != nil { log.Println( err ) } else { log.Print( string( out ) ) } }
 
 func ( c *Configuration ) Parse() ( err error ) {
-	configurationFileName := flag.String( "c", "", "Configuration `filename`" )																		// General flags
-		
-	flag.Int   	 ( "p",  c.Rest.Port, "remote `port`" )																								// REST related flags
-	flag.String	 ( "ca", c.Rest.CA, "CA certificate bundle `filename`" )
-	flag.String	 ( "t",  c.Rest.AccessTokenPath, "access token `filename`" )
-	flag.String	 ( "u",  c.Rest.Username, "hide.me `username`" )
-	flag.String	 ( "P",  c.Rest.Password, "hide.me `password`" )
-	flag.Bool	 ( "pf", c.Rest.PortForward.Enabled, "enable port-forwarding (uPnP and NAT-PMP)" )
-	
-	flag.String	 ( "d",   strings.Join(c.Plain.Servers, ","), "comma separated list of `DNS servers` used for client requests" )					// Resolvers related flags
-	flag.Bool	 ( "doh", c.Rest.UseDoH, "Use DNS-over-HTTPs" )
-	
-	flag.Bool	 ( "forceDns",		c.Rest.Filter.ForceDns, "force tunneled DNS handling on hide.me servers" )										// Filtering related flags
-	flag.Bool	 ( "noAds",			c.Rest.Filter.Ads, "filter ads" )
-	flag.Bool	 ( "noTrackers",	c.Rest.Filter.Trackers, "filter trackers" )
-	flag.Bool	 ( "noMalware",		c.Rest.Filter.Malware, "filter malware" )
-	flag.Bool	 ( "noMalicious",	c.Rest.Filter.Malicious, "filter malicious destinations" )
-	flag.Int	 ( "pg",			c.Rest.Filter.PG, "apply a parental guidance style `age` filter (12, 18)" )
-	flag.Bool	 ( "safeSearch",	c.Rest.Filter.SafeSearch, "force safe search with search engines" )
-	flag.String  ( "noRisk",		strings.Join( c.Rest.Filter.Risk, "," ), "filter content according to risk `level` (possible, medium, high)" )
-	flag.String  ( "noIllegal",		strings.Join( c.Rest.Filter.Illegal, "," ), "filter illegal `kind` (content, warez, spyware, copyright)" )
-	flag.String  ( "noCategories",	strings.Join( c.Rest.Filter.Categories, "," ), "comma separated list of filtered content `categories`" )
-	flag.String  ( "whitelist",		strings.Join( c.Rest.Filter.Categories, "," ), "comma separated list of allowed `dns names`" )
-	flag.String  ( "blacklist",		strings.Join( c.Rest.Filter.Categories, "," ), "comma separated list of filtered `dns names`" )
-	
-	flag.String  ( "i",   c.WireGuard.Name, "network `interface` name" )																			// Link related flags
-	flag.Int     ( "l",   c.WireGuard.ListenPort, "listen `port`" )
-	flag.Int     ( "m",   c.WireGuard.Mark, "firewall `mark` for wireguard and hide.me client originated traffic" )
-	flag.Int     ( "r",   c.WireGuard.RoutingTable, "routing `table` to use" )
-	flag.Int     ( "R",   c.WireGuard.RPDBPriority, "RPDB rule `priority`" )
-	flag.Bool	 ( "k",   c.WireGuard.LeakProtection, "enable/disable leak protection a.k.a. kill-switch" )
-	flag.String  ( "b",   c.WireGuard.ResolvConfBackupFile, "resolv.conf backup `filename`" )
-	flag.Duration( "dpd", c.WireGuard.DpdTimeout, "DPD `timeout`" )
-	flag.String  ( "s",   c.WireGuard.SplitTunnel, "comma separated list of `networks` (CIDRs) for which to bypass the VPN" )
-	flag.Bool	 ( "4",   false, "Use IPv4 tunneling only" )
-	flag.Bool	 ( "6",   false, "Use IPv6 tunneling only" )
-	
-	flag.String  ( "caddr", c.Control.Address, "Control interface listen `address`" )																// Control interface related flags
-	flag.String  ( "ccert", c.Control.Certificate, "Control interface `certificate` file" )
-	flag.String  ( "ckey",  c.Control.Key, "Control interface `key` file" )
-	flag.Int	 ( "cllbs",  c.Control.LineLogBufferSize, "Control interface line log buffer `size`" )
-	
+	configurationFileName := flag.StringP( "config", "c", "", "Configuration `filename`" )																// Configuration flag
+
+	flag.IntVarP		( &c.Rest.Port,						"port",	"p",			c.Rest.Port, "remote `port`" )										// REST flags
+	flag.StringVar		( &c.Rest.CA,						"ca",					c.Rest.CA, "CA certificate bundle `filename`" )
+	flag.StringVarP		( &c.Rest.AccessTokenPath,			"tokenFile", "t",		c.Rest.AccessTokenPath, "access token `filename`" )
+	flag.StringVarP		( &c.Rest.Username,					"username", "u",		c.Rest.Username, "hide.me `username`" )
+	flag.StringVarP		( &c.Rest.Password,					"password", "P",		c.Rest.Password, "hide.me `password`" )
+	flag.BoolVar		( &c.Rest.PortForward.Enabled,		"pf",					c.Rest.PortForward.Enabled, "enable port-forwarding (uPnP and NAT-PMP)" )
+	flag.StringSliceVar	( &c.Plain.Servers,					"dns",					c.Plain.Servers, "comma separated list of DNS `servers`" )			// Resolver flags
+	flag.BoolVar		( &c.Rest.UseDoH,					"doh",					c.Rest.UseDoH, "Use DNS-over-HTTPs" )
+
+	flag.BoolVar		( &c.Rest.Filter.ForceDns,			"forceDns",				c.Rest.Filter.ForceDns, "alway use hide.me DNS servers" )			// Filtering flags
+	flag.BoolVar		( &c.Rest.Filter.Ads,				"noAds",				c.Rest.Filter.Ads, "filter ads" )
+	flag.BoolVar		( &c.Rest.Filter.Trackers,			"noTrackers",			c.Rest.Filter.Trackers, "filter trackers" )
+	flag.BoolVar		( &c.Rest.Filter.Malware,			"noMalware",			c.Rest.Filter.Malware, "filter malware" )
+	flag.BoolVar		( &c.Rest.Filter.Malicious,			"noMalicious",			c.Rest.Filter.Malicious, "filter malicious destinations" )
+	flag.IntVar			( &c.Rest.Filter.PG,				"pg",					c.Rest.Filter.PG, "apply a parental guidance style `age` filter (12, 18)" )
+	flag.BoolVar		( &c.Rest.Filter.SafeSearch,		"safeSearch",			c.Rest.Filter.SafeSearch, "force safe search with search engines" )
+	flag.StringSliceVar	( &c.Rest.Filter.Risk,				"noRisk",				c.Rest.Filter.Risk, "filter content according to risk `level` (possible, medium, high)" )
+	flag.StringSliceVar	( &c.Rest.Filter.Illegal,			"noIllegal",			c.Rest.Filter.Illegal, "filter illegal `kind` (content, warez, spyware, copyright)" )
+	flag.StringSliceVar	( &c.Rest.Filter.Categories,		"noCategories",			c.Rest.Filter.Categories, "comma separated list of filtered content `categories`" )
+	flag.StringSliceVar	( &c.Rest.Filter.Whitelist,			"whitelist",			c.Rest.Filter.Whitelist, "comma separated list of allowed `dns names`" )
+	flag.StringSliceVar	( &c.Rest.Filter.Blacklist,			"blacklist",			c.Rest.Filter.Blacklist, "comma separated list of filtered `dns names`" )
+
+	flag.StringVarP		( &c.WireGuard.Name,				"interface", "i",		c.WireGuard.Name, "network `interface` name" )						// Link flags
+	flag.IntVarP		( &c.WireGuard.ListenPort,			"listen-port", "l",		c.WireGuard.ListenPort, "wireguard listen `port`" )
+	flag.IntVarP		( &c.WireGuard.Mark,				"firewall-mark", "m",	c.WireGuard.Mark, "firewall `mark` for wireguard and hide.me client originated traffic" )
+	flag.IntVarP		( &c.WireGuard.RoutingTable,		"routing-table", "r",	c.WireGuard.RoutingTable, "routing `table` to use" )
+	flag.IntVarP		( &c.WireGuard.RPDBPriority,		"rule-priority", "R",	c.WireGuard.RPDBPriority, "RPDB rule `priority`" )
+
+	flag.BoolVarP		( &c.WireGuard.LeakProtection,		"kill-switch", "k",		c.WireGuard.LeakProtection, "enable/disable leak protection a.k.a. kill-switch" )
+	flag.StringVarP		( &c.WireGuard.ResolvConfBackupFile,"resolv-conf-bak", "b",	c.WireGuard.ResolvConfBackupFile, "resolv.conf backup `filename`" )
+
+	flag.DurationVar	( &c.WireGuard.DpdTimeout,			"dpd",					c.WireGuard.DpdTimeout, "DPD `timeout`" )
+	flag.StringVarP		( &c.WireGuard.SplitTunnel,			"split-tunnel", "s",	c.WireGuard.SplitTunnel, "comma separated list of `networks` (CIDRs) for which to bypass the VPN" )
+	flag.BoolVarP		( &c.WireGuard.IPv4,				"ipv4-only", "4",		false, "Use IPv4 tunneling only" )
+	flag.BoolVarP		( &c.WireGuard.IPv6,				"ipv6-only", "6",		false, "Use IPv6 tunneling only" )
+
+	flag.StringVar		( &c.Control.Address,				"caddr", 				c.Control.Address, "Control interface listen `address`" )			// Control related flags
+	flag.StringVar		( &c.Control.Certificate,			"ccert",				c.Control.Certificate, "Control interface `certificate` file" )
+	flag.StringVar		( &c.Control.Key,					"ckey",					c.Control.Key, "Control interface `key` file" )
+	flag.IntVar			( &c.Control.LineLogBufferSize,		"cllbs",				c.Control.LineLogBufferSize, "Control interface line log buffer `size`" )
+
 	flag.Usage = func() {
 		_, _ = fmt.Fprint( os.Stderr, "Usage:\n  ", os.Args[0], " [options...] <command> [host]\n\n" )
 		_, _ = fmt.Fprint( os.Stderr, "command:\n" )
@@ -173,59 +152,23 @@ func ( c *Configuration ) Parse() ( err error ) {
 		_, _ = fmt.Fprint( os.Stderr, "  resolve - resolve host using DNS-over-HTTPs\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  lookup - resolve host using DNS\n" )
 		_, _ = fmt.Fprint( os.Stderr, "host:\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  fqdn, short name or an IP address of a hide.me server\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  Required when the configuration file does not contain it\n\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  fqdn, short name or an IP address of a hide.me server\n\n" )
 		_, _ = fmt.Fprint( os.Stderr, "options:\n" )
 		flag.PrintDefaults()
 	}
+
+	flag.SetInterspersed(true)
+	flag.CommandLine.SortFlags = false
 	flag.Parse()
-	
-	if len( *configurationFileName ) > 0 { if err = c.Read( *configurationFileName ); err != nil { log.Println( "Conf: [ERR] Read", *configurationFileName, "failed:", err.Error() ); return } }
-	
-	flag.Visit( func( f *flag.Flag ) {																																			// Parse flags
-		switch f.Name {
-			case "p":				c.Rest.Port, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: Port malformed" ) }								// REST related flags
-			case "ca":				c.Rest.CA = f.Value.String()
-			case "t":				c.Rest.AccessTokenPath = f.Value.String()
-			case "u":				c.Rest.Username = f.Value.String()
-			case "P":				c.Rest.Password = f.Value.String()
-			case "pf":			   	c.Rest.PortForward.Enabled = f.Value.String() == "true"
-		
-			case "d":				c.Plain.Servers = strings.Split( f.Value.String(), "," )																					// Resolvers related flags
-			case "doh":				if f.Value.String() == "false" { c.Rest.UseDoH = false }
-		
-			case "forceDns":    	c.Rest.Filter.ForceDns = f.Value.String() == "true"																							// Filtering related flags
-			case "noAds":       	c.Rest.Filter.Ads = f.Value.String() == "true"
-			case "noTrackers":  	c.Rest.Filter.Trackers = f.Value.String() == "true"
-			case "noMalware":   	c.Rest.Filter.Malware = f.Value.String() == "true"
-			case "noMalicious": 	c.Rest.Filter.Malicious = f.Value.String() == "true"
-			case "pg":        		c.Rest.Filter.PG, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: PG malformed" ) }
-			case "safeSearch":		c.Rest.Filter.SafeSearch = f.Value.String() == "true"
-			case "noRisk":			c.Rest.Filter.Risk = strings.Split( f.Value.String(), "," )
-			case "noIllegal":		c.Rest.Filter.Illegal = strings.Split( f.Value.String(), "," )
-			case "noCategories":	c.Rest.Filter.Categories = strings.Split( f.Value.String(), "," )
-			case "whitelist":		c.Rest.Filter.Whitelist = strings.Split( f.Value.String(), "," )
-			case "blacklist":		c.Rest.Filter.Blacklist = strings.Split( f.Value.String(), "," )
-			
-			case "i":   			c.WireGuard.Name = f.Value.String()																											// WireGuard related flags
-			case "l":   			c.WireGuard.ListenPort, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: ListenPort malformed" ) }
-			case "m":   			c.WireGuard.Mark, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: FirewallMark malformed" ) }
-									c.Rest.Mark = c.WireGuard.Mark
-			case "R":   			c.WireGuard.RPDBPriority, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: RPDBPriority malformed" ) }
-			case "r":   			c.WireGuard.RoutingTable, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: RoutingTable malformed" ) }
-			case "k":   			if f.Value.String() == "false" { c.WireGuard.LeakProtection = false }
-			case "b":   			c.WireGuard.ResolvConfBackupFile = f.Value.String()
-			case "dpd": 			c.WireGuard.DpdTimeout, err = time.ParseDuration( f.Value.String() ); if err != nil { log.Println( "Conf: DpdTimeout malformed" ) }
-			case "s":   			c.WireGuard.SplitTunnel = f.Value.String()
-			case "4":   			if f.Value.String() == "true" { c.WireGuard.IPv4 = true; c.WireGuard.IPv6 = false }
-			case "6":   			if f.Value.String() == "true" { c.WireGuard.IPv4 = false; c.WireGuard.IPv6 = true }
-		
-			case "caddr":			c.Control.Address = f.Value.String()																										// Control interface related flags
-			case "ccert":			c.Control.Certificate = f.Value.String()
-			case "ckey":			c.Control.Key = f.Value.String()
-			case "cllbs":			c.Control.LineLogBufferSize, err = strconv.Atoi( f.Value.String() ); if err != nil { log.Println( "Conf: LineLogBufferSize malformed" ) }
-		}
+
+	if len(*configurationFileName) > 0 {																												// Read in the configuration file
+		conf := []byte(nil)
+		if conf, err = os.ReadFile(*configurationFileName); err != nil { if pathErr, ok := err.(*os.PathError); ok { return pathErr.Unwrap() }; return }
+		if conf[0] == '{' { err = json.Unmarshal(conf, c) } else { err = yaml.Unmarshal(conf, c) }														// JSON or YAML
 		if err != nil { return }
-	})
+	}
+
+	c.Rest.Mark = c.WireGuard.Mark																														// Fix
+	if c.WireGuard.IPv4 && c.WireGuard.IPv6 { err = errors.New( "IPv4 and IPv6 tunneling are mutually exclusive" ); log.Println( "Conf: [ERR] Failed:", err.Error() ); return }
 	return
 }

@@ -203,28 +203,28 @@ to a file specified by this option.
 ```
 Use a configuration file named "filename".
 ```
-  -ca string
+  --ca string
     	CA certificate bundle (default "CA.pem")
 ```
 During TLS negotiation the VPN server's certificate needs to be verified. This option makes it possible to specify
 an alternate CA certificate bundle file.
 ```
-  -caddr address
+  --caddr address
     	Control interface listen address (default "@hide.me")
 ```
 Set the service mode control interface listen address. hide.me CLI, by default, listens on an abstract UNIX socket hide.me 
 ```
-  -ccert certificate
+  --ccert certificate
     	Control interface certificate file
 ```
 Set the service mode control interface X509 certificate in PEM format
 ```
-  -ckey key
+  --ckey key
     	Control interface key file
 ```
 Set the service mode control interface private key in PEM format
 ```
-  -cllbs size
+  --cllbs size
     	Control interface line log buffer size
 ```
 Set the service mode control interface line log buffer size
@@ -235,12 +235,12 @@ Set the service mode control interface line log buffer size
 Hide.me CLI may use hide.me operated DNS servers to resolve VPN server names when requesting a token or during
 connect requests. The set of DNS servers used for these purposes may be customized with this option. Note that DoH resolution takes precedence unless disabled.
 ```
-  -doh
+  --doh
     	Use DNS-over-HTTPs
 ```
 Hide.me CLI prioritizes DNS-over-HTTPs servers for DNS resolution purposes. This option disables DNS-over-HTTPs.
 ```
-  -dpd duration
+  --dpd duration
     	DPD timeout (default 1m0s)
 ```
 In order to detect if a connection has stalled, usually due to networking issues, hide.me CLI periodically checks
@@ -271,7 +271,7 @@ Set the firewall mark the WireGuard kernel module will mark its packets with.
 ```
 Remote REST endpoint port may be changed with this option.
 ```
-  -pf
+  --pf
     	enable dynamic port-forwarding technologies (uPnP and NAT-PMP)
 ```
 Dynamic port-forwarding is, by default, disabled. Use this option to turn it on for a particular connection attempt.
@@ -307,62 +307,62 @@ Set hide.me username.
 #### DNS Filter (SmartGuard) ####
 Hide.me CLI supports DNS based filtering (SmartGuard). The following options control DNS filtering: 
 ```
-  -forceDns
+  --forceDns
     	force tunneled DNS handling on hide.me servers
 ```
 Activate DNS redirection on a Hide.me VPN server such that each UDP or TCP DNS request will be handled by that Hide.me VPN server
 ```
-  -whitelist dns names
+  --whitelist dns names
     	comma separated list of allowed dns names
 ```
 DNS suffixes which will bypass any filtering engine ( wildcards accepted )
 ```
-  -blacklist dns names
+  --blacklist dns names
     	comma separated list of filtered dns names
 ```
 DNS names which will be filtered
 ```
-  -noAds
+  --noAds
     	filter ads
 ```
 Activates SmartGuard based ad filtering
 ```
-  -noCategories categories
+  --noCategories categories
     	comma separated list of filtered content categories
 ```
 Activates fine-grained SmartGuard filtering. Fetch category list with categories [command](#commands)
 ``` 
-  -noIllegal kind
+  --noIllegal kind
     	filter illegal kind (content, warez, spyware, copyright)
 ```
 Activates coarse level filtering of illegal content, warez, spyware and copyrighted material
 ```
-  -noMalicious
+  --noMalicious
     	filter malicious destinations
 ```
 Activates filtering of malicious hosts, websites or domains
 ```
-  -noMalware
+  --noMalware
     	filter malware
 ```
 Activates a malware filter. Any site hosting or distributing malware should be filtered out
 ```
-  -noRisk level
+  --noRisk level
     	filter content according to risk level (possible, medium, high)
 ```
 Activates a risk filter
 ```
-  -noTrackers
+  --noTrackers
     	filter trackers
 ```
 Activates a tracking filter
 ```
-  -pg age
+  --pg age
     	apply a parental guidance style age filter (12, 18)
 ```
 Activates a parental guidance style filter according to given age limit. Inappropriate content will be filtered out
 ```
-  -safeSearch
+  --safeSearch
     	force safe search with search engines
 ```
 Enforces SafeSearch mode with supported search engines (Google, Bing)
