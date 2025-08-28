@@ -9,10 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/eventure/hide.client.linux/resolvers/doh"
-	"github.com/eventure/hide.client.linux/resolvers/plain"
-	"golang.org/x/sys/unix"
-	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"io"
 	"log"
 	"net"
@@ -22,9 +18,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/eventure/hide.client.linux/resolvers/doh"
+	"github.com/eventure/hide.client.linux/resolvers/plain"
+	"golang.org/x/sys/unix"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-const userAgent = "HIDE.ME.LINUX.CLI-0.9.10"
+const userAgent = "HIDE.ME.LINUX.CLI-0.9.11"
 
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrBadPin = errors.New( "bad public key PIN" )
