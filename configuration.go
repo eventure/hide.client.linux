@@ -132,8 +132,9 @@ func ( c *Configuration ) Parse() ( err error ) {
 
 	flag.DurationVar	( &c.WireGuard.DpdTimeout,			"dpd",					c.WireGuard.DpdTimeout, "DPD `timeout`" )
 	flag.StringVarP		( &c.WireGuard.SplitTunnel,			"split-tunnel", "s",	c.WireGuard.SplitTunnel, "comma separated list of `networks` (CIDRs) for which to bypass the VPN" )
-	flag.BoolVarP		( &c.WireGuard.IPv4,				"ipv4-only", "4",		false, "Use IPv4 tunneling only" )
-	flag.BoolVarP		( &c.WireGuard.IPv6,				"ipv6-only", "6",		false, "Use IPv6 tunneling only" )
+	
+	v4Only := flag.BoolP(									"ipv4-only", "4",		false, "Use IPv4 tunneling only" )
+	v6Only := flag.BoolP(									"ipv6-only", "6",		false, "Use IPv6 tunneling only" )
 
 	flag.StringVar		( &c.Control.Address,				"caddr", 				c.Control.Address, "Control interface listen `address`" )			// Control related flags
 	flag.StringVar		( &c.Control.Certificate,			"ccert",				c.Control.Certificate, "Control interface `certificate` file" )
@@ -169,6 +170,8 @@ func ( c *Configuration ) Parse() ( err error ) {
 	}
 
 	c.Rest.Mark = c.WireGuard.Mark																														// Fix
-	if c.WireGuard.IPv4 && c.WireGuard.IPv6 { err = errors.New( "IPv4 and IPv6 tunneling are mutually exclusive" ); log.Println( "Conf: [ERR] Failed:", err.Error() ); return }
+	if *v4Only && *v6Only { err = errors.New( "IPv4 only and IPv6 only tunneling are mutually exclusive" ); log.Println( "Conf: [ERR] Failed:", err.Error() ); return }
+	if *v4Only { c.WireGuard.IPv6 = false }
+	if *v6Only { c.WireGuard.IPv4 = false }
 	return
 }
