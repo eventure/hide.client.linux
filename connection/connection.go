@@ -13,6 +13,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+	
+	"github.com/coreos/go-systemd/daemon"
+	"github.com/eventure/hide.client.linux/resolvers/doh"
+	"github.com/eventure/hide.client.linux/resolvers/plain"
+	"github.com/eventure/hide.client.linux/rest"
+	"github.com/eventure/hide.client.linux/wireguard"
 )
 
 const (
