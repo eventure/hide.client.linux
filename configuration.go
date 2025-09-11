@@ -36,7 +36,7 @@ func NewConfiguration() *Configuration {
 			RPDBPriority:			10,											// command line option "-R"
 			LeakProtection:			true,										// command line option "-k"
 			ResolvConfBackupFile:	"",											// command line option "-b"
-			DpdTimeout:				time.Minute,								// command line option "-dpd"
+			DpdTimeout:				time.Minute,								// command line option "--dpd"
 			SplitTunnel:			"",											// command line option "-s"
 			IPv4:					true,										// command line options "-4" and "-6"
 			IPv6:					true,										// command line options "-4" and "-6"
@@ -46,15 +46,15 @@ func NewConfiguration() *Configuration {
 			Host:           		"",											// command line option "-n"
 			Port:					432,										// command line option "-p"
 			Domain:					"hide.me",									// Not configurable
-			CA:						"CA.pem",									// command line option "-ca"
+			CA:						"CA.pem",									// command line option "--ca"
 			AccessTokenPath:		"accessToken.txt",							// command line option "-t"
 			Username:       		"",											// command line option "-u"
 			Password:				"",											// Only configurable through the config file
-			RestTimeout:	 		90 * time.Second,							// Only configurable through the config file
+			RestTimeout:	 		90 * time.Second,							// Command line option "--rest-timeout"
 			ReconnectWait:	 		30 * time.Second,							// Only configurable through the config file
 			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
 			Mark:					0,											// command line option "-m"
-			UseDoH:					true,										// command line option "-doh"
+			UseDoH:					true,										// command line option "--doh"
 		},
 		Control: &control.Config{
 			Address:				"@hide.me",									// command line option "-caddr"
@@ -107,6 +107,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.BoolVar		( &c.Rest.PortForward.Enabled,		"pf",					c.Rest.PortForward.Enabled, "enable port-forwarding (uPnP and NAT-PMP)" )
 	flag.StringSliceVar	( &c.Plain.Servers,					"dns",					c.Plain.Servers, "comma separated list of DNS `servers`" )			// Resolver flags
 	flag.BoolVar		( &c.Rest.UseDoH,					"doh",					c.Rest.UseDoH, "Use DNS-over-HTTPs" )
+	flag.DurationVar	( &c.Rest.RestTimeout,				"rest-timeout",			c.Rest.RestTimeout, "REST call timeout" )
 
 	flag.BoolVar		( &c.Rest.Filter.ForceDns,			"forceDns",				c.Rest.Filter.ForceDns, "alway use hide.me DNS servers" )			// Filtering flags
 	flag.BoolVar		( &c.Rest.Filter.Ads,				"noAds",				c.Rest.Filter.Ads, "filter ads" )
