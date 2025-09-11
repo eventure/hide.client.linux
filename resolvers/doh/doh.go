@@ -53,7 +53,7 @@ func ( d *Resolver ) Init() {
 			case nil:	d.dohServers = d.ParseDnsStamps(file)
 						log.Println( "Init: Parsed", len(d.dohServers), "usable DoH servers from", d.Config.Filename )
 						_ = file.Close()
-			default:	if errors.Is(errFile, os.ErrNotExist) { log.Println( "Init: [ERR] DoH resolvers file", d.Config.Filename, "does not exist" ); break }
+			default:	if errors.Is(errFile, os.ErrNotExist) { log.Println( "Init: [WARN] DoH resolvers file", d.Config.Filename, "does not exist" ); break }
 						log.Println( "Init: [ERR] Read", d.Config.Filename, "failed:", errFile )
 						_ = file.Close()
 		}
@@ -187,7 +187,6 @@ func ( d *Resolver ) ParallelDoH( ctx context.Context, dohServers []string, name
 func ( d *Resolver ) ResolveType( ctx context.Context, name string, queryType dnsmessage.Type ) ( ip net.IP, err error ) {
 	defer func() { if err != nil { log.Println( "DoHx: [ERR] DoH failed:", err ) } }()
 	if len(d.dohServers) == 0 { err = errors.New( "empty DoH server list" ); return }
-	if !strings.HasSuffix( name, "hideservers.net" ) && !strings.HasSuffix( name, "hideservers.net." ) { name += ".hideservers.net." }				// Name must be within hideservers.net domain
 	if !strings.HasSuffix( name, "." ) { name += "." }
 	
 	dohServers, successfulServerIndex := d.dohServers, 0
@@ -217,6 +216,8 @@ func ( d *Resolver ) ResolveType( ctx context.Context, name string, queryType dn
 		dohServers[successfulServerIndex], dohServers[len(dohServers)-1] = dohServers[len(dohServers)-1], dohServers[successfulServerIndex]
 		dohServers = dohServers[:len(dohServers)-1]
 	}
+	
+	if !strings.HasSuffix( name, ".hideservers.net." ) { return }																					// Skip verifications, except for hideservers.net
 	switch queryType {																																// Construct the name as a dash-encoded IP address
 		case dnsmessage.TypeA:		name = strings.ReplaceAll( ip.String(), ".", "-" ) + ".hideservers.net."
 		case dnsmessage.TypeAAAA:	name = strings.ReplaceAll( ip.String(), ":", "-" ) + "-v6.hideservers.net."

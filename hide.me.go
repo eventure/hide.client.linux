@@ -41,24 +41,35 @@ func accessToken( conf *Configuration ) ( err error ) {
 
 // Fetch and dump filtering categories
 func categories( conf *Configuration ) {
-	clientConf := conf.Rest
-	clientConf.Port = 443
-	clientConf.CA = ""
-	client := rest.New( clientConf )																										// Create the REST client
+	client := rest.New( conf.Rest )																											// Create the REST client
 	
 	dohResolver := doh.New(conf.DoH)
 	dohResolver.Init()
 	client.SetDohResolver(dohResolver)
 	
 	plainResolver := plain.New(conf.Plain)
-	if err := plainResolver.Init(); err != nil { log.Println( "Main: [ERR] Plain resolver init failed", err ); return }
+	if err := plainResolver.Init(); err != nil { log.Println( "Cats: [ERR] Plain resolver init failed", err ); return }
 	client.SetPlainResolver(plainResolver)
 	
 	ctx, cancel := context.WithTimeout( context.Background(), conf.Rest.RestTimeout )
 	defer cancel()
-	if err := client.Init(); err != nil { log.Println( "Main: [ERR] REST Client setup failed:", err ); return }
-	if err := client.Resolve( ctx ); err != nil { log.Println( "Main: [ERR] DNS failed:", err ); return }									// Resolve the REST endpoint
-	if err := client.FetchCategoryList( ctx ); err != nil { log.Println( "Main: [ERR] GET request failed:", err ); return }					// Get JSON
+	if err := client.FetchCategoryList( ctx ); err != nil { log.Println( "Cats: [ERR] GET request failed:", err ); return }					// Get JSON
+}
+
+func serverList( conf *Configuration, kind string ) {
+	client := rest.New( conf.Rest )																											// Create the REST client
+	
+	dohResolver := doh.New(conf.DoH)																										// Create a DoH resolver
+	dohResolver.Init()
+	client.SetDohResolver(dohResolver)
+	
+	plainResolver := plain.New(conf.Plain)																									// Create a Plain resolver
+	if err := plainResolver.Init(); err != nil { log.Println( "List: [ERR] Plain resolver init failed", err ); return }
+	client.SetPlainResolver(plainResolver)
+	
+	ctx, cancel := context.WithTimeout( context.Background(), conf.Rest.RestTimeout )
+	defer cancel()
+	if err := client.FetchServerList( ctx, kind ); err != nil { log.Println( "List: [ERR] GET request failed:", err ); return }				// Get JSON
 }
 
 func main() {
@@ -111,6 +122,12 @@ func main() {
 			switch ips, err := plainResolver.Resolve( context.Background(), flag.Arg(1) ); err {
 				case nil:	log.Println( "Main: Resolved", flag.Arg(1), "to", ips )
 				default:	log.Println( "Main: Resolve", flag.Arg(1), "failed:", err )
+			}
+			return
+		case "list":
+			switch flag.Arg(1) {
+				case "free":	serverList( conf, "free" )
+				default:		serverList( conf, "" )
 			}
 			return
 		default: log.Println( "Main: Unsupported command", flag.Arg(0) ); flag.Usage(); return

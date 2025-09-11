@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -18,7 +19,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
+	
+	"github.com/eventure/hide.client.linux/locations"
 	"github.com/eventure/hide.client.linux/resolvers/doh"
 	"github.com/eventure/hide.client.linux/resolvers/plain"
 	"golang.org/x/sys/unix"
@@ -57,10 +59,9 @@ type Config struct {
 // SetHost adds .hideservers.net suffix for short names ( nl becomes nl.hideservers.net ) or removes .hide.me and replaces it with .hideservers.net.
 func ( c *Config ) SetHost( host string ) {
 	c.Host = host
-	if net.ParseIP( c.Host ) != nil { return }
-	if strings.HasSuffix( c.Host, ".hideservers.net" ) { return }
-	c.Host = strings.TrimSuffix( c.Host, ".hide.me" )
-	c.Host += ".hideservers.net"
+	if net.ParseIP(c.Host) != nil { return }												// Host is an IP
+	if strings.HasSuffix( c.Host, ".hideservers.net" ) { return }							// Host has .hideservers.net suffix
+	c.Host = strings.TrimSuffix( c.Host, ".hide.me" ) + ".hideservers.net"					// Trim .hide.me and add .hideservers.net
 }
 
 type Client struct {
@@ -69,7 +70,7 @@ type Client struct {
 	client					*http.Client
 	dohResolver				*doh.Resolver
 	plainResolver			*plain.Resolver
-	remote					*net.TCPAddr
+	remote					*net.TCPAddr													// Remote endpoint as resolved by Resolve
 	
 	accessToken				[]byte
 	authorizedPins			map[string]string
@@ -81,7 +82,7 @@ func (c *Client) SetPlainResolver(plainResolver *plain.Resolver) { c.plainResolv
 
 func ( c *Client ) Init() ( err error ) {
 	if c.Config.Port == 0 { c.Config.Port = 432 }
-	if c.Port == 443 { c.APIVersion = "v1"; log.Println( "Init: [WARNING] Using port 443, API unstable" ) }
+	if c.Port == 443 { c.APIVersion = "v1" }
 	if c.Domain != "hide.me" { err = ErrBadDomain; return }
 	
 	dialer := &net.Dialer{}																															// Use a custom dialer to set the socket mark on sockets when those are configured
@@ -105,7 +106,7 @@ func ( c *Client ) Init() ( err error ) {
 		Protocols: 				&http.Protocols{},
 		TLSClientConfig: &tls.Config{
 			NextProtos:				[]string{ "h2" },
-			ServerName:				"hideservers.net",																								// hideservers.net is always a certificate SAN
+			ServerName:				"hideservers.net",
 			MinVersion:				tls.VersionTLS13,
 			VerifyPeerCertificate:	c.Pins,
 		},
@@ -145,6 +146,7 @@ func ( c *Client ) Remote() *net.TCPAddr { return c.remote }
 
 // Pins checks public key pins of authorized hide.me/hideservers.net CA certificates
 func ( c *Client ) Pins( _ [][]byte, verifiedChains [][]*x509.Certificate) error {
+	if len( c.authorizedPins ) == 0 { return nil }
 	for _, chain := range verifiedChains {
 		chainLoop:
 		for _, certificate := range chain {
@@ -194,7 +196,7 @@ func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return tru
 
 // Resolve resolves an IP of a Hide.me endpoint and stores that IP for further use. Hide.me balances DNS rapidly, so once an IP is acquired it needs to be used for the remainder of the session
 func ( c *Client ) Resolve( ctx context.Context ) ( err error ) {
-	if len( c.Host ) == 0 { err = ErrMissingHost; return }
+	if len( c.Config.Host ) == 0 { err = ErrMissingHost; return }
 	if ip := net.ParseIP( c.Config.Host ); ip != nil { c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }; return }								// c.Host is an IP address, set remote endpoint to that IP
 	
 	var ips []net.IP
@@ -219,7 +221,7 @@ func ( c *Client ) Resolve( ctx context.Context ) ( err error ) {
 
 // Connect issues a connect request to a Hide.me "Connect" endpoint which expects an ordinary POST request with a ConnectRequest JSON payload
 func ( c *Client ) Connect( ctx context.Context, key wgtypes.Key ) ( connectResponse *ConnectResponse, err error ) {
-	if len( c.Host ) == 0 { err = ErrMissingHost; return }
+	if len( c.Config.Host ) == 0 { err = ErrMissingHost; return }
 	connectRequest := &ConnectRequest{
 		Host:			strings.TrimSuffix( c.Config.Host, ".hideservers.net" ),
 		Domain:			c.Config.Domain,
@@ -286,8 +288,13 @@ func ( c *Client ) EnablePortForwarding( ctx context.Context ) ( err error ) {
 }
 
 func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
+	c.Config.Port = 443
+	c.Config.CA = ""
+	
+	if err = c.Init(); err != nil { log.Println( "Cats: [ERR] REST Client setup failed:", err ); return }
 	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
-	defer c.client.Transport.(*http.Transport).Protocols.SetHTTP1( false )
+	if err = c.Resolve( ctx ); err != nil { log.Println( "Cats: [ERR] DNS failed:", err ); return }
+
 	response, err := c.get( ctx, "https://" + c.remote.String() + "/categorization/categories.json" )
 	if err != nil { return }
 	
@@ -301,5 +308,47 @@ func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
 	log.Printf( "%40s | %s\n", "CATEGORY", "DESCRIPTION" )
 	log.Printf( "%40s | %s\n", "--------", "-----------" )
 	for _, cat := range cats { log.Printf( "%40s | %s\n", cat.Name, cat.Description ) }
+	return
+}
+
+func ( c *Client ) FetchServerList( ctx context.Context, kind string ) ( err error ) {
+	c.Config.Port = 443
+	c.Config.CA = ""
+	c.Config.Host = "api.hide.me"
+	
+	if err = c.Init(); err != nil { log.Println( "List: [ERR] REST Client setup failed:", err ); return }
+	c.authorizedPins = nil
+	c.client.Transport.(*http.Transport).TLSClientConfig.ServerName = "api.hide.me"
+	
+	if err = c.Resolve( ctx ); err != nil { log.Println( "List: [ERR] DNS failed:", err ); return }
+
+	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
+	c.client.Transport.(*http.Transport).Protocols.SetHTTP2( true )
+	response, err := c.get( ctx, "https://" + c.remote.String() + "/v1/network/free/en" )
+	if err != nil { return }
+	
+	all := []locations.Location{}
+	if err = json.Unmarshal( response, &all ); err != nil { return }
+	
+	fmt.Printf( "%-30s | %-20s | %s\n", "Location", "Hostname", "Specs" )
+	fmt.Printf( "%-30s | %-20s | %s\n", "--------", "--------", "-----" )
+	
+	var printServers func( locs []locations.Location, k string )
+	printServers = func( locs []locations.Location, k string ) {
+		for _, loc := range locs {
+			special := []string{}
+			for _, tag := range loc.Tags {
+				switch tag {
+					case "free":	special = append(special, "free" )
+					case "10g":		special = append(special, "10g" )
+				}
+			}
+			
+			hostname := strings.TrimSuffix( loc.Hostname, "-v4.hideservers.net" )
+			fmt.Printf( "%-30s | %-20s | %s\n", loc.DisplayName, hostname, strings.Join(special, ",") )
+			if len(loc.Children) > 0 { printServers( loc.Children, k ) }
+		}
+	}
+	printServers( all, kind )
 	return
 }

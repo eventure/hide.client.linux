@@ -152,6 +152,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 		_, _ = fmt.Fprint( os.Stderr, "  updateDoh - update DNS-over-HTTPs server list\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  resolve - resolve host using DNS-over-HTTPs\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  lookup - resolve host using DNS\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  list - fetch the server list\n" )
 		_, _ = fmt.Fprint( os.Stderr, "host:\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  fqdn, short name or an IP address of a hide.me server\n\n" )
 		_, _ = fmt.Fprint( os.Stderr, "options:\n" )
