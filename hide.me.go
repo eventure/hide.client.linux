@@ -28,7 +28,7 @@ func accessToken( conf *Configuration ) ( err error ) {
 	client.SetDohResolver(dohResolver)
 	
 	plainResolver := plain.New(conf.Plain)
-	if err = plainResolver.Init(); err != nil { log.Println( "Main: [ERR] Plain resolver init failed", err ); return }
+	if err = plainResolver.Init(); err != nil { log.Println( "AcTo: [ERR] Plain resolver init failed", err ); return }
 	client.SetPlainResolver(plainResolver)
 	
 	ctx, cancel := context.WithTimeout( context.Background(), conf.Rest.RestTimeout )

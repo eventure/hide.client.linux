@@ -3,13 +3,13 @@ package plain
 import (
 	"context"
 	"errors"
-	"golang.org/x/sys/unix"
 	"log"
 	"math/rand"
 	"net"
-	"strings"
 	"syscall"
 	"time"
+	
+	"golang.org/x/sys/unix"
 )
 
 type RouteOps interface {
@@ -50,10 +50,9 @@ func (d *Resolver) Init() ( err error ) {
 }
 
 func ( d *Resolver ) Resolve( ctx context.Context, name string ) ( ips []net.IP, err error ) {
-	if !strings.HasSuffix( name, "hideservers.net" ) { name += ".hideservers.net" }				// Name must be within hideservers.net domain
 	if len(d.Config.Servers) == 0 { err = errors.New( "empty DNS server list" ); return }
 	
-	endpoint := d.Config.Servers[ rand.Intn( len( d.Config.Servers ) ) ]						// Random DNS server
+	endpoint := d.Config.Servers[ rand.Intn( len(d.Config.Servers) ) ]							// Random DNS server
 	resolver := &net.Resolver{ PreferGo: true, Dial: func(ctx context.Context, network string, addr string) (net.Conn, error) { return d.dialer.DialContext( ctx, network, endpoint ) } }
 	
 	if d.routeOps != nil {																		// Add a throw route when required
