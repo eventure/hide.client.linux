@@ -7,7 +7,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"sync"
+	"time"
 	
 	"github.com/eventure/hide.client.linux/connection"
 	"github.com/eventure/hide.client.linux/resolvers/doh"
@@ -159,8 +162,13 @@ func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
 	return
 }
 
+var cacheControlRegex = regexp.MustCompile( "[[:space:]]*max-age[[:space:]]*=[[:space:]]*([[:digit:]]+)" )
+
 func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	
+	if slb := s.serverListBytes.Load(); slb != nil { writer.Header().Add( "content-type", "application/json" ); writer.Write( *slb ); log.Println( "sLst: ServerList sent" ); return }
+	
 	client := rest.New( s.connection.Config.Rest )																										// Create a REST client ( must be a new one since FetchServerList changes client's configuration )
 	
 	dohResolver := doh.New(s.connection.Config.DoH)																										// Create a DoH resolver
@@ -174,8 +182,17 @@ func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request 
 	ctx, cancel := context.WithTimeout( context.Background(), s.connection.Config.Rest.RestTimeout )
 	defer cancel()
 	
-	response, err := client.FetchServerList( ctx )
+	response, headers, err := client.FetchServerList( ctx )
 	if err != nil { log.Println( "sLst: [ERR] Server list fetch failed:", err ); http.Error( writer, err.Error(), http.StatusBadGateway ); return }
+	
+	if maxAgeMatches := cacheControlRegex.FindStringSubmatch( headers.Get( "cache-control" ) ); len( maxAgeMatches ) > 1 {
+		if maxAge, err := strconv.ParseInt( maxAgeMatches[1], 10, 64 ); err == nil {
+			s.serverListBytes.Store( &response )
+			ttl := time.Duration( maxAge ) * time.Second
+			time.AfterFunc( ttl, func() { s.serverListBytes.Store( nil ); log.Println( "sLst: Server list expired" ) } )
+			log.Println( "sLst: Caching server list for", ttl )
+		}
+	}
 
 	writer.Header().Add( "content-type", "application/json" )
 	writer.Write( response )

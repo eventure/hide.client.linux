@@ -181,7 +181,7 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 	return io.ReadAll( response.Body )
 }
 
-func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte, err error ) {
+func ( c *Client ) get( ctx context.Context, url string ) ( body []byte, headers http.Header, err error ) {
 	request, err := http.NewRequestWithContext( ctx, "GET", url, nil )
 	if err != nil { return }
 	request.Header.Set( "user-agent", userAgent )
@@ -189,7 +189,9 @@ func ( c *Client ) get( ctx context.Context, url string ) ( responseBody []byte,
 	if err != nil { return }
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK { log.Println( "Rest: [ERR] Bad HTTP response (", response.StatusCode, ")" ); err = ErrHttpStatus( response.StatusCode ); return }
-	return io.ReadAll( response.Body )
+	headers = response.Header
+	body, err = io.ReadAll( response.Body )
+	return
 }
 
 func ( c *Client ) HaveAccessToken() bool { if c.accessToken != nil { return true }; return false }
@@ -295,7 +297,7 @@ func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
 	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
 	if err = c.Resolve( ctx ); err != nil { log.Println( "Cats: [ERR] DNS failed:", err ); return }
 
-	response, err := c.get( ctx, "https://" + c.remote.String() + "/categorization/categories.json" )
+	response, _, err := c.get( ctx, "https://" + c.remote.String() + "/categorization/categories.json" )
 	if err != nil { return }
 	
 	type Category struct {
@@ -312,7 +314,7 @@ func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
 }
 
 // FetchServerList fetches the server list from api.hide.me. It has to use system-wide CA store, has to relax PIN checks, use api.hide.me SAN and may use HTTP2
-func ( c *Client ) FetchServerList( ctx context.Context ) ( response []byte, err error ) {
+func ( c *Client ) FetchServerList( ctx context.Context ) ( response []byte, headers http.Header, err error ) {
 	c.Config.Port = 443
 	c.Config.CA = ""
 	c.Config.Host = "api.hide.me"
@@ -329,7 +331,7 @@ func ( c *Client ) FetchServerList( ctx context.Context ) ( response []byte, err
 }
 
 func ( c *Client ) PrintServerList( ctx context.Context, kind string ) ( err error ) {
-	response, err := c.FetchServerList(ctx)
+	response, _, err := c.FetchServerList(ctx)
 	if err != nil { return }
 	
 	all := []locations.Location{}

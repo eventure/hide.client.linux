@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 	
 	"github.com/coreos/go-systemd/daemon"
@@ -26,6 +27,9 @@ type Server struct {
 	listener			net.Listener
 	server				*http.Server
 	connection			*connection.Connection
+	
+	serverListBytes		atomic.Pointer[[]byte]
+	serverListTimer		*time.Timer
 }
 
 func New( controlConfig *Config, connectionConfig *connection.Config ) *Server {
