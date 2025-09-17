@@ -311,7 +311,8 @@ func ( c *Client ) FetchCategoryList( ctx context.Context ) ( err error ) {
 	return
 }
 
-func ( c *Client ) FetchServerList( ctx context.Context, kind string ) ( err error ) {
+// FetchServerList fetches the server list from api.hide.me. It has to use system-wide CA store, has to relax PIN checks, use api.hide.me SAN and may use HTTP2
+func ( c *Client ) FetchServerList( ctx context.Context ) ( response []byte, err error ) {
 	c.Config.Port = 443
 	c.Config.CA = ""
 	c.Config.Host = "api.hide.me"
@@ -324,7 +325,11 @@ func ( c *Client ) FetchServerList( ctx context.Context, kind string ) ( err err
 
 	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
 	c.client.Transport.(*http.Transport).Protocols.SetHTTP2( true )
-	response, err := c.get( ctx, "https://" + c.remote.String() + "/v1/network/free/en" )
+	return c.get( ctx, "https://" + c.remote.String() + "/v1/network/free/en" )
+}
+
+func ( c *Client ) PrintServerList( ctx context.Context, kind string ) ( err error ) {
+	response, err := c.FetchServerList(ctx)
 	if err != nil { return }
 	
 	all := []locations.Location{}

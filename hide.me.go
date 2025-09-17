@@ -69,7 +69,7 @@ func serverList( conf *Configuration, kind string ) {
 	
 	ctx, cancel := context.WithTimeout( context.Background(), conf.Rest.RestTimeout )
 	defer cancel()
-	if err := client.FetchServerList( ctx, kind ); err != nil { log.Println( "List: [ERR] GET request failed:", err ); return }				// Get JSON
+	if err := client.PrintServerList( ctx, kind ); err != nil { log.Println( "List: [ERR] GET request failed:", err ); return }				// Get JSON and print the list
 }
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 		case "conf": conf.Print(); return
 		case "jsonconf": conf.PrintJson(); return
 		case "service":
-			controlServer = control.New( conf.Control, &connection.Config{ Rest: conf.Rest, Wireguard: conf.WireGuard, DoH: conf.DoH } )
+			controlServer = control.New( conf.Control, &connection.Config{ Rest: conf.Rest, Wireguard: conf.WireGuard, DoH: conf.DoH, Plain: conf.Plain } )
 			if err = controlServer.Init(); err != nil { log.Println( "Main: [ERR] Control server initialization failed" ); return }
 			go controlServer.Serve()
 		case "token", "categories", "connect":

@@ -115,6 +115,7 @@ command:
   updateDoh - update DNS-over-HTTPs server list
   resolve - resolve host using DNS-over-HTTPs
   lookup - resolve host using DNS
+  list - fetch the server list
 ```
 To connect to a VPN server, an Access-Token must be requested from a VPN server. The **token** command issues an Access-Token request.
 An Access-Token issued by any server may be used, for authentication, with any other hide.me VPN server.

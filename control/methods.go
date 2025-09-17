@@ -1,13 +1,18 @@
 package control
 
 import (
+	"context"
 	"encoding/json"
-	"github.com/eventure/hide.client.linux/connection"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"sync"
+	
+	"github.com/eventure/hide.client.linux/connection"
+	"github.com/eventure/hide.client.linux/resolvers/doh"
+	"github.com/eventure/hide.client.linux/resolvers/plain"
+	"github.com/eventure/hide.client.linux/rest"
 )
 
 const (
@@ -152,4 +157,28 @@ func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
 			http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return
 	}
 	return
+}
+
+func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request ) {
+	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	client := rest.New( s.connection.Config.Rest )																										// Create a REST client ( must be a new one since FetchServerList changes client's configuration )
+	
+	dohResolver := doh.New(s.connection.Config.DoH)																										// Create a DoH resolver
+	dohResolver.Init()
+	client.SetDohResolver(dohResolver)
+	
+	plainResolver := plain.New(s.connection.Config.Plain)																								// Create a Plain resolver
+	if err := plainResolver.Init(); err != nil { log.Println( "sLst: [ERR] Plain resolver init failed", err ); http.Error( writer, err.Error(), http.StatusBadGateway ); return }
+	client.SetPlainResolver(plainResolver)
+	
+	ctx, cancel := context.WithTimeout( context.Background(), s.connection.Config.Rest.RestTimeout )
+	defer cancel()
+	
+	response, err := client.FetchServerList( ctx )
+	if err != nil { log.Println( "sLst: [ERR] Server list fetch failed:", err ); http.Error( writer, err.Error(), http.StatusBadGateway ); return }
+
+	writer.Header().Add( "content-type", "application/json" )
+	writer.Write( response )
+	
+	log.Println( "sLst: ServerList sent" )
 }

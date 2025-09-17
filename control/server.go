@@ -3,13 +3,14 @@ package control
 import (
 	"context"
 	"errors"
-	"github.com/coreos/go-systemd/daemon"
-	"github.com/eventure/hide.client.linux/connection"
 	"log"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+	
+	"github.com/coreos/go-systemd/daemon"
+	"github.com/eventure/hide.client.linux/connection"
 )
 
 type Config struct {
@@ -49,13 +50,13 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/watch", s.watch )
 	mux.HandleFunc( "/token", s.token )
 	mux.HandleFunc( "/log", s.log )
+	mux.HandleFunc( "/serverList", s.serverList )
 	s.server = &http.Server{ Handler: mux, ReadHeaderTimeout: time.Second * 5 }
 	
 	if s.Config.LineLogBufferSize > 0 {
 		log.SetFlags( log.LUTC | log.Ldate | log.Ltime )
 		log.SetOutput( NewRingLog( s.Config.LineLogBufferSize, log.Writer() ) )
 	}
-	
 	
 	if supported, err := daemon.SdNotify( false, daemon.SdNotifyReady ); supported && err != nil {														// Send SystemD ready notification
 		log.Println( "Init: [ERR] SystemD notification failed:", err )
