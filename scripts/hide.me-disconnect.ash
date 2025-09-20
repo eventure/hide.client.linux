@@ -1,4 +1,13 @@
 #!/bin/ash
+# Disables and removes the wireguard network interface created by the hide.me-connect.ash script, restores the resolv.conf,
+# and immediately signals the hide.me VPN server to invalidate the session so it no longer counts againt the device limit.
+# Dev Note: The SessionKey must be set in the wireguard config file as a specially formatted comment by the connect script.
+#
+# Args:
+#   None
+# Env:
+#   HIDE_ME_CONF_PATH: Optional. The folder the generated wireguard config was stored in. Must match with the connect script. Default=/tmp
+#   HIDE_ME_DEV_NAME: Optional. Name of the wireguard interface. Must match with teh connect script. Default=hide.me
 # example:
 # HIDE_ME_DEV_NAME="hide.me" HIDE_ME_CONF_PATH="/tmp" ./hide.me-disconnect.ash
 
