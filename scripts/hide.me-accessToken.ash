@@ -1,4 +1,14 @@
 #!/bin/ash
+# Contacts a hide.me VPN server and authenticates with user credentials to generate an access token.
+# This access token is relatively long-lived and may be reused across multiple connect-disconnect cycles.
+# Args:
+#   None
+# Env:
+#   HIDE_ME_USERNAME: Required. The user's username
+#   HIDE_ME_PASSWORD: Required. The user's password
+#   HIDE_ME_TOKEN_FILE: Optional. The file to write the base64 encoded access token to. Default=stdout
+#   HIDE_ME_SERVER: Optional. The subdomain of hideservers.net to use. Access tokens from any server can be used when connecting to
+#                   any other server. Default=any
 # example usage:
 # HIDE_ME_SERVER="any" HIDE_ME_USERNAME="myUsername" HIDE_ME_PASSWORD="myPassword" HIDE_ME_TOKEN_FILE=accessToken.txt ./hide.me-accessToken.ash
 
@@ -6,6 +16,8 @@
 if [[ -z "${HIDE_ME_SERVER}" ]]; then HIDE_ME_SERVER="any"; fi
 if [[ -z "${HIDE_ME_USERNAME}" ]]; then echo "Missing username in the environment "; exit 1; fi
 if [[ -z "${HIDE_ME_PASSWORD}" ]]; then echo "Missing password in the environment "; exit 1; fi
+
+if ! command -v curl &>/dev/null; then echo "Missing tool: cURL"; exit 1; fi
 
 url='https:/'${HIDE_ME_SERVER}'.hideservers.net:432/v1.0.0/accessToken'
 
