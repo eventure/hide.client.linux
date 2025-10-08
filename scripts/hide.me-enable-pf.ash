@@ -20,7 +20,7 @@ if [[ -z "${HIDE_ME_TOKEN_FILE}" ]]; then HIDE_ME_TOKEN_FILE="accessToken.txt"; 
 enable="true"
 if [ $# -gt 0 ]; then
     if [ "$1" = "true" ] || [ "$1" = "false" ]; then
-        enable="$1"
+        enable=$1
     else
         die "Incorrect arg1 is not 'true' or 'false': $1"
     fi
@@ -29,16 +29,14 @@ fi
 command -v curl &>/dev/null || die "Missing tool: cURL"
 
 # This is a hardcoded endpoint within the VPN network.
-url="https://10.255.255.250:4321/upnp"
+url="https://vpn.hide.me:4321/upnp"
 
 accessToken=$(cat ${HIDE_ME_TOKEN_FILE})
 data='{
-    "PortForward": {
-        "accessToken":"'${accessToken}'",
-        "enabled":"'${enable}'"
-    }
+	"accessToken":"'${accessToken}'",
+	"enabled":'${enable}'
 }'
 
-jsonConf=$(curl -s -f --cacert CA.pem -X POST --data-binary ${data} ${url})
+jsonConf=$(curl -s -f --cacert CA.pem -X POST --data-binary "${data}" "${url}")
 returnValue=$?
 if [[ ${returnValue} != 0 ]]; then echo "cURL failed with "${returnValue}; exit 1; fi
