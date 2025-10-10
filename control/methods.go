@@ -52,6 +52,9 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 
 func ( s *Server ) route( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
+	
 	switch code := s.connection.Code(); code {
 		case connection.Clean:
 			if err := s.connection.Init(); err != nil { writer.Write( Result{ Error: &Error{ Code: CodeRoute, Message: err.Error() } }.Json() ); return }
@@ -63,6 +66,9 @@ func ( s *Server ) route( writer http.ResponseWriter, request *http.Request ) {
 
 func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
+	
 	writer.Header().Add( "content-type", "application/json" )
 	switch code := s.connection.Code(); code {
 		case connection.Routed: break
@@ -88,6 +94,9 @@ func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) 
 
 func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
+	
 	writer.Header().Add( "content-type", "application/json" )
 	switch code := s.connection.Code(); code {
 		case connection.Connected, connection.Connecting: break
@@ -95,11 +104,13 @@ func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request
 	}
 	s.connection.Disconnect()
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
-	
 }
 
 func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
+	
 	writer.Header().Add( "content-type", "application/json" )
 	switch s.connection.Code() {
 		case connection.Connected, connection.Connecting: s.connection.Disconnect(); s.connection.Shutdown(); break
@@ -117,14 +128,16 @@ func ( s *Server ) state( writer http.ResponseWriter, request *http.Request ) {
 
 func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.numWatchers.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.numWatchers.Store( 0 )
+	
 	writer.Header().Add( "content-type", "application/json" )
 	wg := sync.WaitGroup{}
 	wg.Add( 1 )
 	s.connection.SetStateNotify( func( state *connection.State ) {
 		stateJson, _ := json.Marshal( state )
 		stateJson = append( stateJson, '\n' )
-		_, err := writer.Write( stateJson )
-		if err != nil { wg.Done(); return }
+		if _, err := writer.Write( stateJson ); err != nil { wg.Done(); return }
 		writer.( http.Flusher ).Flush()
 	})
 	wg.Wait()
@@ -132,6 +145,8 @@ func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 }
 
 func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
+	if !s.remoteOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.remoteOps.Store( 0 )
 	switch request.Method {
 		case "DELETE":
 			writer.Header().Add( "content-type", "application/json" )
@@ -166,6 +181,8 @@ var cacheControlRegex = regexp.MustCompile( "[[:space:]]*max-age[[:space:]]*=[[:
 
 func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.remoteOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.remoteOps.Store( 0 )
 	
 	if slb := s.serverListBytes.Load(); slb != nil { writer.Header().Add( "content-type", "application/json" ); writer.Write( *slb ); log.Println( "sLst: ServerList sent" ); return }
 	
