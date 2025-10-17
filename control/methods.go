@@ -1,6 +1,7 @@
 package control
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -36,7 +37,8 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationGet})
 		case "POST":
-			decoder := json.NewDecoder( io.LimitReader( request.Body, 8192 ) )
+			logBuffer := &bytes.Buffer{}
+			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 8192 ), logBuffer ) )
 			s.connection.Lock(); s.connection.Unlock()
 			if err := decoder.Decode( s.connection.Config ); err != nil {
 				log.Println( "Serv: [ERR] Configure failed:", err )
@@ -44,7 +46,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 				writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
 				return
 			}
-			log.Println( "Serv: Configured from", request.RemoteAddr )
+			log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
 			writer.WriteHeader( http.StatusOK )
 			writer.Write( Result{ Result: true }.Json() )
 			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationSet})
