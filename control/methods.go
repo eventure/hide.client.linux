@@ -31,11 +31,13 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 		case "GET":
 			writer.WriteHeader( http.StatusOK )
 			encoder := json.NewEncoder( writer )
+			s.connection.Lock(); s.connection.Unlock()
 			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configure failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationGet})
 		case "POST":
 			decoder := json.NewDecoder( io.LimitReader( request.Body, 8192 ) )
+			s.connection.Lock(); s.connection.Unlock()
 			if err := decoder.Decode( s.connection.Config ); err != nil {
 				log.Println( "Serv: [ERR] Configure failed:", err )
 				writer.WriteHeader( http.StatusBadRequest )
@@ -150,6 +152,7 @@ func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
 	switch request.Method {
 		case "DELETE":
 			writer.Header().Add( "content-type", "application/json" )
+			s.connection.Lock(); defer s.connection.Unlock()
 			writer.Write( Result{ Result: os.Remove( s.connection.Config.Rest.AccessTokenPath ) }.Json() )
 		case "GET":
 			writer.Header().Add( "content-type", "application/json" )
@@ -186,13 +189,15 @@ func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request 
 	
 	if slb := s.serverListBytes.Load(); slb != nil { writer.Header().Add( "content-type", "application/json" ); writer.Write( *slb ); log.Println( "sLst: ServerList sent" ); return }
 	
+	s.connection.Lock(); defer s.connection.Unlock()
+	
 	client := rest.New( s.connection.Config.Rest )																										// Create a REST client ( must be a new one since FetchServerList changes client's configuration )
 	
-	dohResolver := doh.New(s.connection.Config.DoH)																										// Create a DoH resolver
+	dohResolver := doh.New( s.connection.Config.DoH )																									// Create a DoH resolver
 	dohResolver.Init()
 	client.SetDohResolver(dohResolver)
 	
-	plainResolver := plain.New(s.connection.Config.Plain)																								// Create a Plain resolver
+	plainResolver := plain.New( s.connection.Config.Plain )																								// Create a Plain resolver
 	if err := plainResolver.Init(); err != nil { log.Println( "sLst: [ERR] Plain resolver init failed", err ); http.Error( writer, err.Error(), http.StatusBadGateway ); return }
 	client.SetPlainResolver(plainResolver)
 	

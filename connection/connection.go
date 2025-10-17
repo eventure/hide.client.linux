@@ -227,6 +227,7 @@ func ( c *Connection ) AccessTokenRefresh() {
 }
 
 func ( c *Connection ) AccessTokenFetch() ( accessToken string, err error ) {
+	c.Lock(); defer c.Unlock()
 	restClient := rest.New( c.Config.Rest )
 	if err = restClient.Init(); err != nil { log.Println( "AcFe: REST client failed:", err ); return }
 	ctx, cancel := context.WithTimeout( context.Background(), c.Config.Rest.RestTimeout )
