@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"net/url"
@@ -131,28 +132,31 @@ func ( c *Connection ) Connect() {
 	var err error
 	defer func() {
 		switch err {
-			case nil, context.Canceled: break																									// No error (successful connection) or a cancelled context (interrupted connection attempt) may not cause a reconnect
+			case nil, context.Canceled: break																									// No error (successful connection) or a cancelled context (interrupted connection attempt) should not cause a reconnect
 			case rest.ErrAppUpdateRequired, rest.ErrBadPin, rest.ErrMissingHost: c.Disconnect()													// These errors are fatal, do not reconnect
 			default:
 				c.Disconnect()
 				if _, ok := err.(rest.ErrHttpStatus); ok { break }																				// Do not try to reconnect on HTTP status errors
-				if _, ok := err.(*net.DNSError); ok { break }																					// Do not try to reconnect on DNS errors
+				var DNSError *net.DNSError
+				if errors.As(err, &DNSError) { break }																							// Do not try to reconnect on DNS errors
 				c.ScheduleConnect( c.restClient.Config.ReconnectWait )
 		}
 		if c.connectNotify != nil { c.connectNotify( err ); c.connectNotify = nil }
 		c.StateNotify( c.state )
 	}()
 	
+	c.Lock()
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
-	c.Lock(); c.connectCancel = cancel; c.Unlock()
+	c.connectCancel = cancel
 	
 	for network := range strings.SplitSeq( c.link.Config.SplitTunnel, "," ) {																	// throw routes for split-tunnel destinations
 		if len( network ) == 0 { continue }
-		_, ipNet, err := net.ParseCIDR( network )
-		if err != nil { log.Println( "Init: [ERR] Parse split-tunnel route from", network, "failed:", err ); return }
-		if err = c.link.ThrowRouteAdd( "Split-Tunnel", ipNet ); err != nil { log.Println( "Init: [ERR] Split-tunnel route to ", network, "failed:", err ); return }
+		_, ipNet, parseErr := net.ParseCIDR( network )
+		if parseErr != nil { log.Println( "Init: [ERR] Parse split-tunnel route from", network, "failed:", parseErr ); c.Unlock(); return }
+		if err = c.link.ThrowRouteAdd( "Split-Tunnel", ipNet ); err != nil { log.Println( "Init: [ERR] Split-tunnel route to ", network, "failed:", err ); c.Unlock(); return }
 		c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "Split-Tunnel", ipNet ) } )
 	}
+	c.Unlock()
 	
 	if err = c.restClient.Resolve( ctx ); err != nil { return }																					// Resolve the remote address
 	serverIpNet := wireguard.Ip2Net( c.restClient.Remote().IP )
