@@ -34,6 +34,7 @@ type State struct {
 	*rest.ConnectResponse		`json:",omitempty"`
 	Rx				int64		`json:"rx,omitempty"`
 	Tx				int64		`json:"tx,omitempty"`
+	Host			string		`json:"host,omitempty"`
 }
 
 type Config struct {
@@ -190,6 +191,7 @@ func ( c *Connection ) Connect() {
 	go c.Filter()																																// Apply possible filters
 	go c.PortForward()																															// Activate port-forwarding
 	c.state.Code = Connected																													// Connection is running now so set state to connected
+	c.state.Host = c.Config.Rest.Host																											// Set the hostname to Host
 }
 
 func ( c *Connection ) Disconnect() {
