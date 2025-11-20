@@ -31,7 +31,6 @@ type Server struct {
 	serverListBytes		atomic.Pointer[[]byte]
 	serverListTimer		*time.Timer
 	
-	numWatchers			atomic.Uint32
 	connectionOps		atomic.Uint32
 	remoteOps			atomic.Uint32
 }

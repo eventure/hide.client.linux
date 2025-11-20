@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -64,9 +65,9 @@ type Connection struct {
 	
 	state			*State
 	notifySystemd	bool
-	
+
 	connectNotify	func( err error )
-	stateNotify		func( state *State )
+	stateNotifyFns	[]*func( state *State )
 }
 
 func New( config *Config ) *Connection { return &Connection{ Config: config, state: &State{ Code: Clean } } }
@@ -74,8 +75,10 @@ func ( c *Connection ) State() *State { c.Lock(); if c.state.Code == Connected {
 func ( c *Connection ) Code() ( code string ) { c.Lock(); code = c.state.Code; c.Unlock(); return }
 func ( c *Connection ) NotifySystemd( notifySystemd bool ) { c.notifySystemd = notifySystemd }
 func ( c *Connection ) SetConnectNotify( connectNotify func(err error) ) { c.Lock(); c.connectNotify = connectNotify; c.Unlock() }
-func ( c *Connection ) SetStateNotify( StateNotify func(state *State) ) { c.Lock(); c.stateNotify = StateNotify; c.Unlock() }
-func ( c *Connection ) StateNotify( state *State ) { if c.stateNotify == nil { return }; c.stateNotify( state ) }
+
+func ( c *Connection ) StateNotify( state *State ) { c.Lock(); for _, stateNotifyFn := range c.stateNotifyFns { defer (*stateNotifyFn)( state ) }; c.Unlock() }
+func ( c *Connection ) StateNotifyFnAdd( stateNotifyFn *func( state *State ) ) { c.Lock(); c.stateNotifyFns = append( c.stateNotifyFns, stateNotifyFn ); c.Unlock() }
+func ( c *Connection ) StateNotifyFnDel( stateNotifyFn *func( state *State ) ) { c.Lock(); c.stateNotifyFns = slices.DeleteFunc( c.stateNotifyFns, func( fn *func( state *State ) ) bool { return fn == stateNotifyFn } ); c.Unlock() }
 
 func ( c *Connection ) Init() ( err error ) {
 	defer func() { if err != nil { c.Shutdown() } } ()																							// If anything fails, undo changes

@@ -132,20 +132,19 @@ func ( s *Server ) state( writer http.ResponseWriter, request *http.Request ) {
 
 func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.numWatchers.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.numWatchers.Store( 0 )
-	
+
 	writer.Header().Add( "content-type", "application/json" )
 	wg := sync.WaitGroup{}
 	wg.Add( 1 )
-	s.connection.SetStateNotify( func( state *connection.State ) {
+	stateNotifyFn := func( state *connection.State ) {
 		stateJson, _ := json.Marshal( state )
 		stateJson = append( stateJson, '\n' )
 		if _, err := writer.Write( stateJson ); err != nil { wg.Done(); return }
 		writer.( http.Flusher ).Flush()
-	})
+	}
+	s.connection.StateNotifyFnAdd( &stateNotifyFn )
 	wg.Wait()
-	s.connection.SetStateNotify( nil )
+	s.connection.StateNotifyFnDel( &stateNotifyFn )
 }
 
 func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
