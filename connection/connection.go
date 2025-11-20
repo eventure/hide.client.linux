@@ -67,6 +67,8 @@ type Connection struct {
 	notifySystemd	bool
 
 	connectNotify	func( err error )
+	
+	stateNotifyLock	sync.RWMutex
 	stateNotifyFns	[]*func( state *State )
 }
 
@@ -76,9 +78,9 @@ func ( c *Connection ) Code() ( code string ) { c.Lock(); code = c.state.Code; c
 func ( c *Connection ) NotifySystemd( notifySystemd bool ) { c.notifySystemd = notifySystemd }
 func ( c *Connection ) SetConnectNotify( connectNotify func(err error) ) { c.Lock(); c.connectNotify = connectNotify; c.Unlock() }
 
-func ( c *Connection ) StateNotify( state *State ) { c.Lock(); for _, stateNotifyFn := range c.stateNotifyFns { defer (*stateNotifyFn)( state ) }; c.Unlock() }
-func ( c *Connection ) StateNotifyFnAdd( stateNotifyFn *func( state *State ) ) { c.Lock(); c.stateNotifyFns = append( c.stateNotifyFns, stateNotifyFn ); c.Unlock() }
-func ( c *Connection ) StateNotifyFnDel( stateNotifyFn *func( state *State ) ) { c.Lock(); c.stateNotifyFns = slices.DeleteFunc( c.stateNotifyFns, func( fn *func( state *State ) ) bool { return fn == stateNotifyFn } ); c.Unlock() }
+func ( c *Connection ) StateNotify( state *State ) { c.stateNotifyLock.RLock(); for _, stateNotifyFn := range c.stateNotifyFns { defer (*stateNotifyFn)( state ) }; c.stateNotifyLock.RUnlock() }
+func ( c *Connection ) StateNotifyFnAdd( stateNotifyFn *func( state *State ) ) { c.stateNotifyLock.Lock(); c.stateNotifyFns = append( c.stateNotifyFns, stateNotifyFn ); c.stateNotifyLock.Unlock() }
+func ( c *Connection ) StateNotifyFnDel( stateNotifyFn *func( state *State ) ) { c.stateNotifyLock.Lock(); c.stateNotifyFns = slices.DeleteFunc( c.stateNotifyFns, func( fn *func( state *State ) ) bool { return fn == stateNotifyFn } ); c.stateNotifyLock.Unlock() }
 
 func ( c *Connection ) Init() ( err error ) {
 	defer func() { if err != nil { c.Shutdown() } } ()																							// If anything fails, undo changes
