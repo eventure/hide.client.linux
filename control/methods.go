@@ -135,16 +135,17 @@ func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 
 	writer.Header().Add( "content-type", "application/json" )
 	wg := sync.WaitGroup{}
-	wg.Add( 1 )
-	stateNotifyFn := func( state *connection.State ) {
+	wg.Add(1)
+
+	var stateNotifyFn func( state *connection.State )
+	stateNotifyFn = func( state *connection.State ) {
 		stateJson, _ := json.Marshal( state )
 		stateJson = append( stateJson, '\n' )
-		if _, err := writer.Write( stateJson ); err != nil { wg.Done(); return }
+		if _, err := writer.Write( stateJson ); err != nil { s.connection.StateNotifyFnDel( &stateNotifyFn ); wg.Done(); return }
 		writer.( http.Flusher ).Flush()
 	}
 	s.connection.StateNotifyFnAdd( &stateNotifyFn )
 	wg.Wait()
-	s.connection.StateNotifyFnDel( &stateNotifyFn )
 }
 
 func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
