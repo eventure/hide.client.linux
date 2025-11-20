@@ -1,7 +1,6 @@
 package control
 
 import (
-	"context"
 	"errors"
 	"log"
 	"net"
@@ -89,7 +88,5 @@ func ( s *Server ) Serve() ( err error ) {
 func ( s *Server ) Shutdown() error {
 	s.connection.Disconnect()
 	s.connection.Shutdown()
-	ctx, cancel := context.WithTimeout( context.Background(), time.Second * 5 )
-	defer cancel()
-	return s.server.Shutdown( ctx )
+	return s.server.Close()
 }
