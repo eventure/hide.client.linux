@@ -2,13 +2,14 @@ package wireguard
 
 import (
 	"errors"
+	"log"
+	"net"
+	"time"
+	
 	"github.com/eventure/hide.client.linux/rest"
 	"github.com/vishvananda/netlink"
 	"golang.zx2c4.com/wireguard/wgctrl"
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
-	"log"
-	"net"
-	"time"
 )
 
 type Config struct {
@@ -99,6 +100,7 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 func ( l *Link ) Down() {
 	if rxBytes, txBytes, err := l.Acct(); err == nil { log.Println( "Link: Received", rxBytes, "bytes, transmitted", txBytes, "bytes" ) }
 	for i := len( l.stack )-1; i >= 0; i-- { _ = l.stack[i]() }
+	l.stack = l.stack[:0]
 	log.Println( "Link: Down" )
 	return
 }
