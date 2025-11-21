@@ -32,14 +32,14 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 		case "GET":
 			writer.WriteHeader( http.StatusOK )
 			encoder := json.NewEncoder( writer )
-			s.connection.Lock(); s.connection.Unlock()
+			s.connection.Lock(); defer s.connection.Unlock()
 			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configure failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationGet})
 		case "POST":
 			logBuffer := &bytes.Buffer{}
 			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 8192 ), logBuffer ) )
-			s.connection.Lock(); s.connection.Unlock()
+			s.connection.Lock(); defer s.connection.Unlock()
 			if err := decoder.Decode( s.connection.Config ); err != nil {
 				log.Println( "Serv: [ERR] Configure failed:", err )
 				writer.WriteHeader( http.StatusBadRequest )
@@ -96,31 +96,26 @@ func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) 
 	wg.Wait()
 }
 
+// disconnect is gentle, leaves the client in "routed" state, i.e. leak protection is active
 func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
 	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
 	defer s.connectionOps.Store( 0 )
 	
 	writer.Header().Add( "content-type", "application/json" )
-	switch code := s.connection.Code(); code {
-		case connection.Connected, connection.Connecting: break
-		default: writer.Write( Result{ Error: &Error{ Code: CodeDisconnect, Message: "bad state: " + code } }.Json() ); return
-	}
 	s.connection.Disconnect()
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 
+// destroy is harsh, removes everything set up by Init()
 func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
 	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
 	defer s.connectionOps.Store( 0 )
 	
 	writer.Header().Add( "content-type", "application/json" )
-	switch s.connection.Code() {
-		case connection.Connected, connection.Connecting: s.connection.Disconnect(); s.connection.Shutdown(); break
-		case connection.Routed: s.connection.Shutdown(); break
-		default: break
-	}
+	s.connection.Disconnect()
+	s.connection.Shutdown()
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 

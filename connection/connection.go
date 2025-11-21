@@ -28,6 +28,7 @@ const (
 	LogDump = "logs dumped"
 	Disconnecting = "disconnecting"
 	DpdTimeout = "dpd timeout"
+	DnsLookup = "dns lookup"
 )
 
 type State struct {
@@ -128,6 +129,7 @@ func ( c *Connection ) Shutdown() { c.Lock(); for i := len(c.initStack)-1; i >= 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
 	c.Lock(); defer c.Unlock()
 	if c.connectTimer == nil { c.connectTimer = time.AfterFunc( in, c.Connect ) } else { c.connectTimer.Reset( in ) }
+	c.state.Host = c.Config.Rest.Host																											// Set the hostname to Host
 	c.state.Code = Connecting																													// Set state to connecting
 	c.StateNotify( c.state )
 	log.Println( "Conn: Connecting in", in )
@@ -153,7 +155,9 @@ func ( c *Connection ) Connect() {
 	}
 	c.Unlock()
 	
-	if err = c.restClient.Resolve( ctx ); err != nil { log.Println( "Conn: [ERR] Resolve", c.Config.Rest.Host, "failed"); return }				// Resolve the remote address
+	c.state.Code = DnsLookup																													// Set state to "dns lookup"
+	c.StateNotify( c.state )
+	if err = c.restClient.Resolve( ctx ); err != nil { log.Println( "Conn: [ERR] Resolve", c.Config.Rest.Host, "failed" ); return }				// Resolve the remote address
 	serverIpNet := wireguard.Ip2Net( c.restClient.Remote().IP )
 	
 	c.Lock()
@@ -196,7 +200,6 @@ func ( c *Connection ) Connect() {
 	go c.Filter()																																// Apply possible filters
 	go c.PortForward()																															// Activate port-forwarding
 	c.state.Code = Connected																													// Connection is running now so set state to connected
-	c.state.Host = c.Config.Rest.Host																											// Set the hostname to Host
 }
 
 func ( c *Connection ) Disconnect() {
