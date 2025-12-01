@@ -5,6 +5,7 @@ go 1.24.0
 require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/jedisct1/go-dnsstamps v0.0.0-20240423203910-07a0735c7774
+	github.com/spf13/pflag v1.0.7
 	github.com/vishvananda/netlink v1.3.0
 	golang.org/x/crypto v0.36.0
 	golang.org/x/net v0.38.0
@@ -19,7 +20,6 @@ require (
 	github.com/mdlayher/genetlink v1.3.2 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
-	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/term v0.30.0 // indirect
