@@ -144,8 +144,8 @@ func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 }
 
 func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
-	if !s.remoteOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.remoteOps.Store( 0 )
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
 	switch request.Method {
 		case "DELETE":
 			writer.Header().Add( "content-type", "application/json" )
@@ -181,8 +181,8 @@ var cacheControlRegex = regexp.MustCompile( "[[:space:]]*max-age[[:space:]]*=[[:
 
 func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.remoteOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.remoteOps.Store( 0 )
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
 	
 	if slb := s.serverListBytes.Load(); slb != nil { writer.Header().Add( "content-type", "application/json" ); writer.Write( *slb ); log.Println( "sLst: ServerList sent" ); return }
 	

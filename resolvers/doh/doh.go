@@ -151,10 +151,10 @@ func ( d *Resolver ) ParallelDoH( ctx context.Context, dohServers []string, name
 	if err != nil { log.Println( "PDoH: [ERR] Create DNS message failed:", err ); return }
 	
 	responses = make( chan DoHResponse, len(dohServers) )
-	var responseBuf []byte
 	var stamp dnsstamps.ServerStamp
 	for i := 0; i < len(dohServers); i++ {																											// Send POST requests
 		go func() {
+			var responseBuf []byte
 			response := DoHResponse{index: i}
 			defer func() { responses <- response } ()																								// Always send on a channel signaling completion, even if no IP got resolved
 			

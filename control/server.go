@@ -31,7 +31,6 @@ type Server struct {
 	serverListTimer		*time.Timer
 	
 	connectionOps		atomic.Uint32
-	remoteOps			atomic.Uint32
 }
 
 func New( controlConfig *Config, connectionConfig *connection.Config ) *Server {
@@ -57,6 +56,7 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/token", s.token )
 	mux.HandleFunc( "/log", s.log )
 	mux.HandleFunc( "/serverList", s.serverList )
+	mux.HandleFunc( "/externalIps", s.externalIps )
 	s.server = &http.Server{ Handler: mux, ReadHeaderTimeout: time.Second * 5 }
 	
 	if s.Config.LineLogBufferSize > 0 {

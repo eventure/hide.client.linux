@@ -319,11 +319,11 @@ func ( c *Client ) FetchServerList( ctx context.Context ) ( response []byte, hea
 	c.Config.CA = ""
 	c.Config.Host = "api.hide.me"
 	
-	if err = c.Init(); err != nil { log.Println( "List: [ERR] REST Client setup failed:", err ); return }
+	if err = c.Init(); err != nil { log.Println( "SeLi: [ERR] REST Client setup failed:", err ); return }
 	c.authorizedPins = nil
 	c.client.Transport.(*http.Transport).TLSClientConfig.ServerName = "api.hide.me"
 	
-	if err = c.Resolve( ctx ); err != nil { log.Println( "List: [ERR] DNS failed:", err ); return }
+	if err = c.Resolve( ctx ); err != nil { log.Println( "SeLi: [ERR] DNS failed:", err ); return }
 
 	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
 	c.client.Transport.(*http.Transport).Protocols.SetHTTP2( true )
