@@ -1,12 +1,13 @@
 package wireguard
 
 import (
-	"github.com/eventure/hide.client.linux/rest"
-	"github.com/vishvananda/netlink"
-	"golang.org/x/sys/unix"
 	"log"
 	"net"
 	"strconv"
+	
+	"github.com/eventure/hide.client.linux/rest"
+	"github.com/vishvananda/netlink"
+	"golang.org/x/sys/unix"
 )
 
 var Mask32 = net.CIDRMask( 32, 32 )
@@ -38,7 +39,7 @@ func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 		// defaultRoute := &netlink.Route{ LinkIndex: l.wireguardLink.Attrs().Index, Scope: unix.RT_SCOPE_UNIVERSE, Gw: gw, Protocol: unix.RTPROT_BOOT, Table: l.Config.RoutingTable, Type: unix.RTN_UNICAST }
 		if err = netlink.RouteAdd( gatewayRoute ); err != nil { log.Println( "Link: [ERR] Gateway route", routeString( gatewayRoute ), "addition failed:", err ); continue }
 		log.Println( "Link: Gateway route", routeString( gatewayRoute ), "added" )
-		l.gatewayRoutes = append( l.gatewayRoutes, gatewayRoute)
+		l.gatewayRoutes = append( l.gatewayRoutes, gatewayRoute )
 		
 		routes := []netlink.Route(nil)
 		if gw.To4() != nil {

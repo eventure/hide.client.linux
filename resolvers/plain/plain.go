@@ -60,8 +60,8 @@ func ( d *Resolver ) Resolve( ctx context.Context, name string ) ( ips []net.IP,
 		if ip := net.ParseIP(host); ip != nil {
 			mask := net.CIDRMask(128,128)
 			if ip4 := ip.To4(); ip4 != nil { ip, mask = ip4, net.CIDRMask(32,32) }
-			if err = d.routeOps.ThrowRouteAdd( "DNS server " + endpoint, &net.IPNet{IP: ip, Mask: mask }); err != nil { return nil, err }
-			defer d.routeOps.ThrowRouteDel( "DNS server " + endpoint, &net.IPNet{IP: ip, Mask: mask } )
+			if err = d.routeOps.ThrowRouteAdd( "DNS server " + endpoint, &net.IPNet{ IP: ip, Mask: mask } ); err != nil { return nil, err }
+			defer d.routeOps.ThrowRouteDel( "DNS server " + endpoint, &net.IPNet{ IP: ip, Mask: mask } )
 		}
 	}
 	

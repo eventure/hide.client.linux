@@ -40,7 +40,7 @@ type State struct {
 	Host			string		`json:"host,omitempty"`
 }
 
-func ( s *State ) SetCode( code string ) { s.Code, s.Timestamp = code, time.Now() }
+func ( s *State ) SetCode( code string ) *State { s.Code, s.Timestamp = code, time.Now(); return s }
 
 type Config struct {
 	Rest			*rest.Config
@@ -76,7 +76,7 @@ type Connection struct {
 	stateNotifyFns	[]*func( state *State )
 }
 
-func New( config *Config ) *Connection { return &Connection{ Config: config, state: &State{ Code: Clean } } }
+func New( config *Config ) *Connection { return &Connection{ Config: config, state: &State{ Code: Clean }, initStack: make( []func(), 0 ), connectStack: make( []func(), 0 ) } }
 func ( c *Connection ) State() *State { c.Lock(); if c.state.Code == Connected { c.state.Rx, c.state.Tx, _ = c.link.Acct() }; c.Unlock(); return c.state }
 func ( c *Connection ) Code() ( code string ) { c.Lock(); code = c.state.Code; c.Unlock(); return }
 func ( c *Connection ) NotifySystemd( notifySystemd bool ) { c.notifySystemd = notifySystemd }
@@ -121,21 +121,19 @@ func ( c *Connection ) Init() ( err error ) {
 	c.restClient.SetDohResolver( c.dohResolver )
 	c.restClient.SetPlainResolver( c.plainResolver )
 
-	c.state.SetCode( Routed )																													// Set state to routed
-	c.StateNotify( c.state )
+	c.StateNotify( c.state.SetCode( Routed ) )																									// Set state to routed
 	log.Println( "Init: Done" )
 	return
 }
 
-func ( c *Connection ) Shutdown() { c.Lock(); for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.state.Code, c.state.Timestamp = Clean, time.Now(); c.StateNotify( c.state ); c.Unlock() }
+func ( c *Connection ) Shutdown() { c.Lock(); for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.StateNotify( c.state.SetCode( Clean ) ); c.Unlock() }
 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
-	c.Lock(); defer c.Unlock()
+	c.Lock()
 	if c.connectTimer == nil { c.connectTimer = time.AfterFunc( in, c.Connect ) } else { c.connectTimer.Reset( in ) }
 	c.state.Host = c.Config.Rest.Host																											// Set the hostname to Host
-	c.state.SetCode( Connecting )																												// Set state to connecting
-	c.StateNotify( c.state )
 	log.Println( "Conn: Connecting in", in )
+	c.Unlock()
 }
 
 func ( c *Connection ) Connect() {
@@ -146,6 +144,8 @@ func ( c *Connection ) Connect() {
 	}()
 	
 	c.Lock()
+	c.StateNotify( c.state.SetCode( Connecting ) )																								// Set state to connecting
+	
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 	c.connectCancel = cancel
 	
@@ -157,11 +157,11 @@ func ( c *Connection ) Connect() {
 		c.connectStack = append( c.connectStack, func() { _ = c.link.ThrowRouteDel( "Split-Tunnel", ipNet ) } )
 	}
 	c.Unlock()
-	
-	c.state.SetCode( DnsLookup )																												// Set state to "dns lookup"
-	c.StateNotify( c.state )
+
+	c.StateNotify( &State{ Code: DnsLookup, Timestamp: time.Now() } )																			// Broadcast "dns lookup" state
 	if err = c.restClient.Resolve( ctx ); err != nil { log.Println( "Conn: [ERR] Resolve", c.Config.Rest.Host, "failed" ); return }				// Resolve the remote address
 	serverIpNet := wireguard.Ip2Net( c.restClient.Remote().IP )
+	c.StateNotify( c.state )																													// Rebroadcast "connecting"
 	
 	c.Lock()
 	if c.link.Config.Mark == 0 {																												// throw route for VPN server's IP ( only when marks are not being used )
@@ -207,15 +207,14 @@ func ( c *Connection ) Connect() {
 
 func ( c *Connection ) Disconnect() {
 	c.Lock()
-	c.StateNotify( &State{ Code: Disconnecting, Timestamp: time.Now() } )
-	if c.connectTimer != nil { c.connectTimer.Stop() }																							// Stop a possible scheduled connect
-	if c.connectCancel != nil { c.connectCancel() }																								// Stop a possible concurrent connect
+	c.StateNotify( c.state.SetCode( Disconnecting ) )
+	if c.connectTimer != nil { c.connectTimer.Stop(); c.connectTimer = nil }																	// Stop a possible scheduled connect
+	if c.connectCancel != nil { c.connectCancel(); c.connectCancel = nil  }																		// Stop a possible concurrent connect
 	for i := len(c.connectStack)-1; i >= 0; i-- { c.connectStack[i]() }
 	c.connectStack = c.connectStack[:0]
 	c.state.ConnectResponse = nil
 	c.state.Rx,c.state.Tx = 0, 0
-	c.state.SetCode( Routed )																													// Set state to routed
-	c.StateNotify( c.state )
+	c.StateNotify( c.state.SetCode( Routed ) )																									// Set state to routed
 	c.Unlock()
 }
 
@@ -226,9 +225,10 @@ func ( c *Connection ) AccessTokenRefresh() {
 	time.AfterFunc( c.restClient.Config.AccessTokenUpdateDelay, func() {
 		ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 		defer cancel()
+		c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )																		// TokenUpdate is a temporary client state
 		if accessToken, err := c.restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcRe: [ERR] Access-Token update failed:", err ); return } else { c.Config.Rest.AccessToken = accessToken }
 		log.Println( "AcRe: Access-Token updated" )
-		c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )
+		c.StateNotify( c.state )																												// Broadcast our state
 	})
 }
 
@@ -238,11 +238,12 @@ func ( c *Connection ) AccessTokenFetch() ( accessToken string, err error ) {
 	if err = restClient.Init(); err != nil { log.Println( "AcFe: REST client failed:", err ); return }
 	ctx, cancel := context.WithTimeout( context.Background(), c.Config.Rest.RestTimeout )
 	defer cancel()
+	c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )																			// TokenUpdate is a temporary client state
 	if err = restClient.Resolve( ctx ); err != nil {  log.Println( "AcFe: [ERR] Access-Token fetch ( resolve ) failed:", err ); return }
 	if accessToken, err = restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcFe: [ERR] Access-Token fetch failed:", err ); return }
 	c.Config.Rest.AccessToken = accessToken
+	c.StateNotify( c.state )																													// Broadcast our state
 	log.Println( "AcFe: Access-Token updated" )
-	c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )
 	return
 }
 
@@ -267,15 +268,19 @@ func ( c *Connection ) PortForward() {
 }
 
 func ( c *Connection ) DPD() {
-	c.dpdTimer.Reset( c.link.Config.DpdTimeout )
+	c.Lock()
 	currentRx, err := c.link.GetRx()
-	if err != nil { log.Println( "DPD: Failed:", err.Error() ); c.Disconnect(); c.Shutdown(); return }
+	if err != nil { c.Unlock(); log.Println( "DPD: Failed:", err.Error() ); c.Disconnect(); c.Shutdown(); return }
 	if currentRx == c.lastRx {
-		log.Println( "DPD: Timeout" );
-		c.lastRx = 0;
-		c.StateNotify( &State{ Code: DpdTimeout, Timestamp: time.Now() } )
-		c.Disconnect();
+		c.lastRx = 0
+		c.StateNotify( c.state.SetCode( DpdTimeout ) )
+		c.Unlock()
+		log.Println( "DPD: Timeout" )
+		c.Disconnect()
 		c.ScheduleConnect( c.restClient.Config.ReconnectWait )
+		return
 	}
 	c.lastRx = currentRx
+	c.dpdTimer.Reset( c.link.Config.DpdTimeout )
+	c.Unlock()
 }
