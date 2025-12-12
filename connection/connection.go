@@ -267,6 +267,28 @@ func ( c *Connection ) PortForward() {
 	}
 }
 
+func ( c *Connection ) ExternalIps( ctx context.Context ) ( ips []net.IP ) {
+	c.Lock(); defer c.Unlock()
+	if c.restClient == nil { log.Println( "ExIp: Client not initialized" ); return }
+	if c.link == nil { log.Println( "ExIp: Link not initialized" ); return }
+	
+	newRestConfig := *c.Config.Rest																													// Duplicate config since ExternalIps changes Port, CA and Host fields
+	client := rest.New( &newRestConfig )																											// Create a REST client ( must be a new one since externalIps changes client's configuration )
+	dohResolver := doh.New( c.Config.DoH )																											// Create a DoH resolver
+	dohResolver.Init()																																// Initialize DoHResolver
+	client.SetDohResolver( dohResolver )																											// Attach the DoH resolver
+	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback)
+	if err := plainResolver.Init(); err != nil { log.Println( "ExternalIps: [ERR] Plain resolver failed:", err ); return }							// Initialize Plain resolver
+	client.SetPlainResolver( plainResolver )																										// Attach the Plain resolver
+	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }											// DoH or Plain resolution throw routes required when leak protection mode active in routed state
+	
+	return client.ExternalIps( ctx, func( route bool, ip net.IP ) error {
+		if c.state.Code != Routed { return nil }																									// Throw routes required when leak protection mode active in routed state
+		if c.link.Config.Mark != 0 { return nil }																									// When marks are used no throw routes are required
+		if route { return c.link.ThrowRouteAdd( "External IP", wireguard.Ip2Net( ip ) ) } else { return c.link.ThrowRouteDel( "External IP", wireguard.Ip2Net( ip ) ) }
+	})
+}
+
 func ( c *Connection ) DPD() {
 	c.Lock()
 	currentRx, err := c.link.GetRx()

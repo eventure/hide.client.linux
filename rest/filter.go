@@ -72,6 +72,6 @@ func (f *Filter) Check() error {
 	}
 	for _, name := range f.Whitelist { if !nameRegexp.MatchString( name ) { return errors.New( "bad DNS name " + name ) } }
 	for _, name := range f.Blacklist { if !nameRegexp.MatchString( name ) { return errors.New( "bad DNS name " + name ) } }
-	
+
 	return nil
 }

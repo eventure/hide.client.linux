@@ -30,7 +30,7 @@ func Ip2Net( ip net.IP ) *net.IPNet {
 }
 
 // Add the routes to the configured table
-func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
+func (l *Link) gatewayRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 	// Override default routes OpenVPN def1 style
 	for _, gw := range response.Gateway {
 		if gw.To4() != nil { if ! l.Config.IPv4 { continue } } else { if ! l.Config.IPv6 { continue } }
@@ -86,7 +86,7 @@ func (l *Link) ipRoutesAdd( response *rest.ConnectResponse ) ( err error ) {
 }
 
 // Remove the default routes
-func (l *Link) ipRoutesRemove() ( err error ) {
+func (l *Link) gatewayRoutesRemove() ( err error ) {
 	for _, route := range l.routes {
 		if err = netlink.RouteDel( route ); err != nil { log.Println( "Link: [ERR] Route", routeString( route ), "removal failed:", err ); continue }
 		log.Println( "Link: Route", routeString( route ), "removed" )

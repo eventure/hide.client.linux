@@ -202,7 +202,7 @@ func ( c *Client ) Resolve( ctx context.Context ) ( err error ) {
 	if ip := net.ParseIP( c.Config.Host ); ip != nil { c.remote = &net.TCPAddr{ IP: ip, Port: c.Config.Port }; return }								// c.Host is an IP address, set remote endpoint to that IP
 	
 	var ips []net.IP
-	if c.Config.UseDoH {
+	if c.Config.UseDoH && c.dohResolver != nil {
 		if ips, err = c.dohResolver.Resolve( ctx, c.Config.Host ); err == nil && len(ips) > 0 {														// Use DoH response, fall back to plain DNS on error or no results
 			c.remote = &net.TCPAddr{ IP: ips[0], Port: c.Config.Port }																				// ips[0] will be IPv4 on IPv4 only and dual-stack
 			log.Println( "Name: DoH resolved", c.Config.Host, "to", c.remote.IP )
@@ -357,5 +357,43 @@ func ( c *Client ) PrintServerList( ctx context.Context, kind string ) ( err err
 		}
 	}
 	printServers( all, kind )
+	return
+}
+
+// ExternalIps fetches external Ips from ipcheck(-v6).hideservers.net
+func ( c *Client ) ExternalIps( ctx context.Context, routeFn func( bool, net.IP ) error ) ( ips []net.IP ) {
+	c.Config.Port = 80
+	c.Config.CA = ""
+	var buf []byte
+	var err error
+	
+	if err = c.Init(); err != nil { log.Println( "ExIp: [ERR] REST Client setup failed:", err ); return }
+	c.authorizedPins = nil
+	c.client.Transport.(*http.Transport).Protocols.SetHTTP1( true )
+	c.client.Transport.(*http.Transport).Protocols.SetHTTP2( true )
+	
+	for {
+		c.Config.Host = "ipcheck.hideservers.net"
+		c.client.Transport.(*http.Transport).TLSClientConfig.ServerName = "ipcheck.hideservers.net"
+		if err = c.Resolve( ctx ); err != nil { log.Println( "ExIp: [ERR] DNS failed:", err ); break }
+		if err = routeFn( true, c.Remote().IP ); err != nil { log.Println( "ExIp: [ERR] Routing failed:", err ); break }
+		buf, _, err = c.get( ctx, "http://" + c.remote.String() )
+		_ = routeFn( false, c.Remote().IP )
+		if err != nil { log.Println( "ExIp: [ERR] Get http://" + c.Config.Host + " failed" ); break }
+		ips = append( ips, net.ParseIP( string(buf) ) )
+		break
+	}
+	
+	for {
+		c.Config.Host = "ipcheck-v6.hideservers.net"
+		c.client.Transport.(*http.Transport).TLSClientConfig.ServerName = "ipcheck-v6.hideservers.net"
+		if err = c.Resolve( ctx ); err != nil { log.Println( "ExIp: [ERR] DNS failed:", err ); break }
+		if err = routeFn( true, c.Remote().IP ); err != nil { log.Println( "ExIp: [ERR] Routing failed:", err ); break }
+		buf, _, err = c.get( ctx, "http://" + c.remote.String() )
+		_ = routeFn( false, c.Remote().IP )
+		if err != nil { log.Println( "ExIp: [ERR] Get http://" + c.Config.Host + " failed" ); break }
+		ips = append( ips, net.ParseIP( string(buf) ) )
+		break
+	}
 	return
 }

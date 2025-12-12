@@ -88,8 +88,8 @@ func ( l *Link ) Up( response *rest.ConnectResponse ) ( err error ) {
 	l.stack = append( l.stack, l.wgRemovePeer )
 	if err = l.ipAddrsAdd( response.AllowedIps ); err != nil { l.Down(); return }																			// Add the IP addresses to the wireguard device
 	l.stack = append( l.stack, l.ipAddrsDel )
-	if err = l.ipRoutesAdd( response ); err != nil { l.Down(); return }																						// Add the default routes over the wireguard interface
-	l.stack = append( l.stack, l.ipRoutesRemove )
+	if err = l.gatewayRoutesAdd( response ); err != nil { l.Down(); return }																				// Add the default routes over the wireguard interface
+	l.stack = append( l.stack, l.gatewayRoutesRemove )
 	if err = l.dnsSet( response.DNS ); err != nil { l.Down(); return }																						// Set the DNS
 	l.stack = append( l.stack, l.dnsRestore )
 	log.Println( "Link: Up" )

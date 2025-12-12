@@ -35,7 +35,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			s.connection.Lock(); defer s.connection.Unlock()
 			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configure failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
-			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationGet})
+			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
 		case "POST":
 			logBuffer := &bytes.Buffer{}
 			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 8192 ), logBuffer ) )
@@ -49,7 +49,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
 			writer.WriteHeader( http.StatusOK )
 			writer.Write( Result{ Result: true }.Json() )
-			s.connection.StateNotify( &connection.State{Code: connection.ConfigurationSet})
+			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
 		default: http.Error( writer, "not found", http.StatusNotFound )
 	}
 }
@@ -217,4 +217,19 @@ func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request 
 	writer.Write( response )
 	
 	log.Println( "sLst: ServerList sent" )
+}
+
+func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request ) {
+	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
+	
+	ctx, cancel := context.WithTimeout( context.Background(), s.connection.Config.Rest.RestTimeout )
+	defer cancel()
+	ips := s.connection.ExternalIps( ctx )
+	
+	writer.Header().Add( "content-type", "application/json" )
+	if err := json.NewEncoder( writer ).Encode( ips ); err != nil { log.Println( "exIp: [ERR] External IP response send failed:", err ); http.Error( writer, err.Error(), http.StatusInternalServerError ); return }
+	
+	log.Println( "exIP: External IPs", ips, "sent" )
 }
