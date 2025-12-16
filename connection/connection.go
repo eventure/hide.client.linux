@@ -282,13 +282,14 @@ func ( c *Connection ) ExternalIps( ctx context.Context ) ( ips []net.IP ) {
 	c.Lock(); defer c.Unlock()
 	
 	newRestConfig := *c.Config.Rest																													// Duplicate config since ExternalIps changes Port, CA and Host fields
-	client := rest.New( &newRestConfig )																											// Create a REST client ( must be a new one since externalIps changes client's configuration )
+	client := rest.New( &newRestConfig )																											// Create a REST client (must be a new one since externalIps changes client's configuration)
 	dohResolver := doh.New( c.Config.DoH )																											// Create a DoH resolver
-	dohResolver.Init()																																// Initialize DoHResolver
-	client.SetDohResolver( dohResolver )																											// Attach the DoH resolver
+	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }					// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
+
 	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback)
 	if err := plainResolver.Init(); err != nil { log.Println( "ExternalIps: [ERR] Plain resolver failed:", err ); return }							// Initialize Plain resolver
 	client.SetPlainResolver( plainResolver )																										// Attach the Plain resolver
+
 	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }											// DoH or Plain resolution throw routes required when leak protection mode active in routed state
 	
 	return client.ExternalIps( ctx, func( route bool, ip net.IP ) error {
