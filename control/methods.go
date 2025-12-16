@@ -107,6 +107,16 @@ func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 
+func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request ) {
+	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
+	defer s.connectionOps.Store( 0 )
+	
+	writer.Header().Add( "content-type", "application/json" )
+	s.connection.Shutdown()
+	writer.Write( Result{ Result: s.connection.State() }.Json() )
+}
+
 // destroy is harsh, removes everything set up by Init()
 func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }

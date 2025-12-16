@@ -50,6 +50,7 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/route", s.route )
 	mux.HandleFunc( "/connect", s.connect )
 	mux.HandleFunc( "/disconnect", s.disconnect )
+	mux.HandleFunc( "/shutdown", s.shutdown )
 	mux.HandleFunc( "/destroy", s.destroy )
 	mux.HandleFunc( "/state", s.state )
 	mux.HandleFunc( "/watch", s.watch )
