@@ -376,7 +376,7 @@ func ( c *Client ) ExternalIps( ctx context.Context, routeFn func( bool, net.IP 
 		c.Config.Host = "ipcheck.hideservers.net"
 		c.client.Transport.(*http.Transport).TLSClientConfig.ServerName = "ipcheck.hideservers.net"
 		if err = c.Resolve( ctx ); err != nil { log.Println( "ExIp: [ERR] DNS failed:", err ); break }
-		if err = routeFn( true, c.Remote().IP ); err != nil { log.Println( "ExIp: [ERR] Routing failed:", err ); break }
+		if err = routeFn( true, c.Remote().IP ); err != nil { log.Println( "ExIp: [ERR] Route", c.Remote().IP, "failed:", err ); break }
 		buf, _, err = c.get( ctx, "http://" + c.remote.String() )
 		_ = routeFn( false, c.Remote().IP )
 		if err != nil { log.Println( "ExIp: [ERR] Get http://" + c.Config.Host + " failed" ); break }
@@ -388,7 +388,7 @@ func ( c *Client ) ExternalIps( ctx context.Context, routeFn func( bool, net.IP 
 		c.Config.Host = "ipcheck-v6.hideservers.net"
 		c.client.Transport.(*http.Transport).TLSClientConfig.ServerName = "ipcheck-v6.hideservers.net"
 		if err = c.Resolve( ctx ); err != nil { log.Println( "ExIp: [ERR] DNS failed:", err ); break }
-		if err = routeFn( true, c.Remote().IP ); err != nil { log.Println( "ExIp: [ERR] Routing failed:", err ); break }
+		if err = routeFn( true, c.Remote().IP ); err != nil { log.Println( "ExIp: [ERR] Route", c.Remote().IP, "failed:", err ); break }
 		buf, _, err = c.get( ctx, "http://" + c.remote.String() )
 		_ = routeFn( false, c.Remote().IP )
 		if err != nil { log.Println( "ExIp: [ERR] Get http://" + c.Config.Host + " failed" ); break }

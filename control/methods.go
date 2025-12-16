@@ -226,6 +226,7 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 	
 	ctx, cancel := context.WithTimeout( context.Background(), s.connection.Config.Rest.RestTimeout )
 	defer cancel()
+	log.Println( "exIp: Performing External IP lookups" )
 	ips := s.connection.ExternalIps( ctx )
 	
 	writer.Header().Add( "content-type", "application/json" )

@@ -126,7 +126,14 @@ func ( c *Connection ) Init() ( err error ) {
 	return
 }
 
-func ( c *Connection ) Shutdown() { c.Lock(); for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.StateNotify( c.state.SetCode( Clean ) ); c.Unlock() }
+func ( c *Connection ) Shutdown() {
+	c.Lock()
+	switch c.state.Code {																														// Shutdown makes sense when Routed
+		case Routed: break
+		default: log.Println( "Disc: [WARN] Called Shutdown while", c.state.Code ); c.Unlock(); return
+	}
+	for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.StateNotify( c.state.SetCode( Clean ) ); c.Unlock()
+}
 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
 	c.Lock()
@@ -207,6 +214,10 @@ func ( c *Connection ) Connect() {
 
 func ( c *Connection ) Disconnect() {
 	c.Lock()
+	switch c.state.Code {																														// Disconnect makes sense when Connecting, Connected and on DPD timeout
+		case Connected, Connecting, DpdTimeout: break
+		default: log.Println( "Disc: [WARN] Called Disconnect while", c.state.Code ); c.Unlock(); return
+	}
 	c.StateNotify( c.state.SetCode( Disconnecting ) )
 	if c.connectTimer != nil { c.connectTimer.Stop(); c.connectTimer = nil }																	// Stop a possible scheduled connect
 	if c.connectCancel != nil { c.connectCancel(); c.connectCancel = nil  }																		// Stop a possible concurrent connect
@@ -269,8 +280,6 @@ func ( c *Connection ) PortForward() {
 
 func ( c *Connection ) ExternalIps( ctx context.Context ) ( ips []net.IP ) {
 	c.Lock(); defer c.Unlock()
-	if c.restClient == nil { log.Println( "ExIp: Client not initialized" ); return }
-	if c.link == nil { log.Println( "ExIp: Link not initialized" ); return }
 	
 	newRestConfig := *c.Config.Rest																													// Duplicate config since ExternalIps changes Port, CA and Host fields
 	client := rest.New( &newRestConfig )																											// Create a REST client ( must be a new one since externalIps changes client's configuration )
