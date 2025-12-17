@@ -28,6 +28,10 @@ const (
 )
 
 func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Request ) {
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	switch request.Method {
 		case "GET":
 			writer.WriteHeader( http.StatusOK )
@@ -56,8 +60,10 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 
 func ( s *Server ) route( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	
 	switch code := s.connection.Code(); code {
 		case connection.Clean:
@@ -70,8 +76,10 @@ func ( s *Server ) route( writer http.ResponseWriter, request *http.Request ) {
 
 func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	
 	writer.Header().Add( "content-type", "application/json" )
 	switch code := s.connection.Code(); code {
@@ -99,8 +107,10 @@ func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) 
 // disconnect is gentle, leaves the client in "routed" state, i.e. leak protection is active
 func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	
 	writer.Header().Add( "content-type", "application/json" )
 	s.connection.Disconnect()
@@ -109,9 +119,10 @@ func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request
 
 func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
-	
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	writer.Header().Add( "content-type", "application/json" )
 	s.connection.Shutdown()
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
@@ -120,8 +131,10 @@ func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request )
 // destroy is harsh, removes everything set up by Init()
 func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	
 	writer.Header().Add( "content-type", "application/json" )
 	s.connection.Disconnect()
@@ -131,6 +144,10 @@ func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) 
 
 func ( s *Server ) state( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	writer.Header().Add( "content-type", "application/json" )
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
@@ -142,20 +159,23 @@ func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
+	flusher := writer.(http.Flusher)
 	var stateNotifyFn func( state *connection.State )
 	stateNotifyFn = func( state *connection.State ) {
 		stateJson, _ := json.Marshal( state )
 		stateJson = append( stateJson, '\n' )
 		if _, err := writer.Write( stateJson ); err != nil { s.connection.StateNotifyFnDel( &stateNotifyFn ); wg.Done(); return }
-		writer.( http.Flusher ).Flush()
+		flusher.Flush()
 	}
 	s.connection.StateNotifyFnAdd( &stateNotifyFn )
 	wg.Wait()
 }
 
 func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	switch request.Method {
 		case "DELETE":
 			writer.Header().Add( "content-type", "application/json" )
@@ -191,8 +211,10 @@ var cacheControlRegex = regexp.MustCompile( "[[:space:]]*max-age[[:space:]]*=[[:
 
 func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	
 	if slb := s.serverListBytes.Load(); slb != nil { writer.Header().Add( "content-type", "application/json" ); writer.Write( *slb ); log.Println( "sLst: ServerList sent" ); return }
 	
@@ -231,8 +253,10 @@ func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request 
 
 func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-	if !s.connectionOps.CompareAndSwap( 0, 1 ) { http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return }
-	defer s.connectionOps.Store( 0 )
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
 	
 	ctx, cancel := context.WithTimeout( context.Background(), s.connection.Config.Rest.RestTimeout )
 	defer cancel()

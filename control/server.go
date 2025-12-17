@@ -22,21 +22,21 @@ type Config struct {
 
 type Server struct {
 	*Config
-	
+
 	listener			net.Listener
 	server				*http.Server
 	connection			*connection.Connection
-	
+
 	serverListBytes		atomic.Pointer[[]byte]
 	serverListTimer		*time.Timer
-	
-	connectionOps		atomic.Uint32
+
+	connectionOpsLock	chan struct{}
 }
 
 func New( controlConfig *Config, connectionConfig *connection.Config ) *Server {
 	if controlConfig == nil { controlConfig = &Config{} }
 	if connectionConfig == nil { connectionConfig = &connection.Config{} }
-	return &Server{ Config: controlConfig, connection: connection.New( connectionConfig )}
+	return &Server{ Config: controlConfig, connection: connection.New( connectionConfig ), connectionOpsLock: make(chan struct{}, 1) }
 }
 
 func ( s *Server ) Init() ( err error ) {
