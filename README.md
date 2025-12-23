@@ -43,7 +43,7 @@ from https://aur.archlinux.org/packages/hide-client/
 
 To build:
 ```
-makepkg && sudo pacman -U hide-client-0.9.1-1-any.pkg.tar.zst 
+makepkg && sudo pacman -U hide-client-0.9.12-1-any.pkg.tar.zst 
 ```
 Note that the ArchLinux package changes the default locations of the installed files to
 `/usr/bin/hide.me` for the binary,

@@ -104,7 +104,7 @@ func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) 
 	wg.Wait()
 }
 
-// disconnect is gentle, leaves the client in "routed" state, i.e. leak protection is active
+// disconnect is gentle, leaves the client in "routed" state, i.e. leak protection might be active when configured
 func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
 	select {
@@ -128,7 +128,7 @@ func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request )
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 
-// destroy is harsh, removes everything set up by Init()
+// destroy is harsh, disconnects and removes everything set up by Init()
 func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) {
 	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
 	select {
@@ -267,4 +267,10 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 	if err := json.NewEncoder( writer ).Encode( ips ); err != nil { log.Println( "exIp: [ERR] External IP response send failed:", err ); http.Error( writer, err.Error(), http.StatusInternalServerError ); return }
 	
 	log.Println( "exIP: External IPs", ips, "sent" )
+}
+
+func ( s *Server ) version(writer http.ResponseWriter, request *http.Request ) {
+	writer.Header().Add( "content-type", "application/json" )
+	log.Println( "vers: Sending version", "0.9.12" )
+	writer.Write( []byte( "0.9.12" ) )
 }

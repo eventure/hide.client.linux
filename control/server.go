@@ -58,6 +58,7 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/log", s.log )
 	mux.HandleFunc( "/serverList", s.serverList )
 	mux.HandleFunc( "/externalIps", s.externalIps )
+	mux.HandleFunc( "/version", s.version )
 	s.server = &http.Server{ Handler: mux, ReadHeaderTimeout: time.Second * 5 }
 	
 	if s.Config.LineLogBufferSize > 0 {
