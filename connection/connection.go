@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"net/url"
@@ -93,6 +94,7 @@ func ( c *Connection ) Init() ( err error ) {
 	c.link = wireguard.New( c.Config.Wireguard )
 	if err = c.link.Open(); err != nil { log.Println( "Init: [ERR] Wireguard open failed:", err ); return }										// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
 	c.initStack = append( c.initStack, c.link.Close )
+	defer c.StateNotify( c.state.SetCode( Routed ) )																							// Make sure to set state to "routed" so that the initStack may be unwound in Shutdown
 
 	c.dohResolver = doh.New( c.Config.DoH )
 	c.dohResolver.Init()																														// Initialize DoHResolver
@@ -101,27 +103,27 @@ func ( c *Connection ) Init() ( err error ) {
 	c.plainResolver = plain.New( c.Config.Plain )
 	if err = c.plainResolver.Init(); err != nil { log.Println( "Init: [ERR] Plain resolver failed:", err ); return }
 	c.plainResolver.SetRouteOps( c.link )
+	
+	c.restClient = rest.New( c.Config.Rest )
+	if err = c.restClient.Init(); err != nil { log.Println( "Init: [ERR] REST Client setup failed:", err ); return }							// Initialize the REST client
+	if !c.restClient.HaveAccessToken() { err = errors.New( "no Access-Token"); log.Println( "Init: [ERR] Failed: ", err ); return }				// Access-Token is required for the Connect/Disconnect methods
+	c.restClient.SetDohResolver( c.dohResolver )
+	c.restClient.SetPlainResolver( c.plainResolver )
 
 	_, dhcpDestination, _ := net.ParseCIDR( "255.255.255.255/32" )																				// IPv4 DHCP VPN bypass "throw" route
 	if err = c.link.ThrowRouteAdd( "DHCP bypass", dhcpDestination ); err != nil { log.Println( "Init: [ERR] DHCP bypass route failed:", err ); return }
 	c.initStack = append( c.initStack, func() { _ = c.link.ThrowRouteDel( "DHCP bypass", dhcpDestination ) } )
 
 	if c.link.Config.LeakProtection {																											// Add the "loopback" default routes to the configured routing tables ( IP leak protection )
-		if err = c.link.LoopbackRoutesAdd(); err != nil { log.Println( "Init: [ERR] Addition of loopback routes failed:", err ); return }
+		err = c.link.LoopbackRoutesAdd()
 		c.initStack = append( c.initStack, c.link.LoopbackRoutesDel )
+		if err != nil { log.Println( "Init: [ERR] Addition of loopback routes failed:", err ); return }
 	}
 
 	err = c.link.RulesAdd()																														// Add the RPDB rules which direct traffic to configured routing tables
 	c.initStack = append( c.initStack, c.link.RulesDel )
 	if err != nil { log.Println( "Init: [ERR] RPDB rules failed:", err ); return }
 
-	c.restClient = rest.New( c.Config.Rest )
-	if err = c.restClient.Init(); err != nil { log.Println( "Init: [ERR] REST Client setup failed:", err ); return }							// Initialize the REST client
-	if !c.restClient.HaveAccessToken() { log.Println( "Init: [ERR] No Access-Token available" ); return }										// Access-Token is required for the Connect/Disconnect methods
-	c.restClient.SetDohResolver( c.dohResolver )
-	c.restClient.SetPlainResolver( c.plainResolver )
-
-	c.StateNotify( c.state.SetCode( Routed ) )																									// Set state to routed
 	log.Println( "Init: Done" )
 	return
 }
