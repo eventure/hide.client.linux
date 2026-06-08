@@ -68,9 +68,7 @@ func (l *Link) gatewayRoutesAdd( response *rest.ConnectResponse ) ( err error ) 
 				MTU: l.mtu,
 			}
 			routes = append(routes, overrideRoute )
-			overrideRoute.Dst = &net.IPNet{ IP: net.ParseIP( "2000::" ), Mask: net.CIDRMask( 4, 128 ) }			// 2000::/4
-			routes = append(routes, overrideRoute )
-			overrideRoute.Dst = &net.IPNet{ IP: net.ParseIP( "3000::" ), Mask: net.CIDRMask( 4, 128 ) }			// 3000::/4
+			overrideRoute.Dst = &net.IPNet{ IP: net.ParseIP( "2000::" ), Mask: net.CIDRMask( 3, 128 ) }			// 2000::/3
 			routes = append(routes, overrideRoute )
 			overrideRoute.Dst = &net.IPNet{ IP: net.ParseIP( "fc00::" ), Mask: net.CIDRMask( 7, 128 ) }			// fc00::/7
 			routes = append(routes, overrideRoute )

@@ -54,6 +54,7 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/destroy", s.destroy )
 	mux.HandleFunc( "/state", s.state )
 	mux.HandleFunc( "/watch", s.watch )
+	mux.HandleFunc( "/requestToken", s.requestToken )
 	mux.HandleFunc( "/token", s.token )
 	mux.HandleFunc( "/log", s.log )
 	mux.HandleFunc( "/serverList", s.serverList )

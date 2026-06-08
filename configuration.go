@@ -26,6 +26,8 @@ type Configuration struct {
 	Plain		*plain.Config		`yaml:"plain,omitempty" json:",omitempty"`
 }
 
+var configurationFileName string
+
 func NewConfiguration() *Configuration {
 	h := &Configuration{														// Defaults
 		WireGuard: &wireguard.Config{
@@ -95,9 +97,17 @@ func NewConfiguration() *Configuration {
 
 func ( c *Configuration ) Print() { if out, err := yaml.Marshal( c ); err != nil { log.Println( err ) } else { fmt.Print( string( out ) ) } }
 func ( c *Configuration ) PrintJson() { if out, err := json.MarshalIndent( c, "", "\t" ); err != nil { log.Println( err ) } else { log.Print( string( out ) ) } }
+func ( c *Configuration ) SaveJson() error {
+	if len(configurationFileName) == 0 { log.Println( "Conf: [WARN] No configuration filename set" ); return nil }
+	out, err := json.MarshalIndent( c, "", "\t" )
+	if err != nil { log.Println( "Conf: [ERR] Marshal failed with", err ); return err }
+	if err = os.WriteFile( configurationFileName, out, 0600 ); err != nil { log.Println( "Conf: [ERR] Save", configurationFileName, "failed with", err ); return err }
+	log.Println( "Conf: Configurations saved to", configurationFileName )
+	return nil
+}
 
 func ( c *Configuration ) Parse() ( err error ) {
-	configurationFileName := flag.StringP( "config", "c", "", "Configuration `filename`" )																// Configuration flag
+	configurationFileName = *flag.StringP( "config", "c", "", "Configuration `filename`" )																// Configuration flag
 
 	flag.IntVarP		( &c.Rest.Port,						"port",	"p",			c.Rest.Port, "remote `port`" )										// REST flags
 	flag.StringVar		( &c.Rest.CA,						"ca",					c.Rest.CA, "CA certificate bundle `filename`" )
@@ -164,9 +174,9 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.CommandLine.SortFlags = false
 	flag.Parse()
 
-	if len(*configurationFileName) > 0 {																												// Read in the configuration file
+	if len(configurationFileName) > 0 {																												// Read in the configuration file
 		conf := []byte(nil)
-		if conf, err = os.ReadFile(*configurationFileName); err != nil { if pathErr, ok := err.(*os.PathError); ok { return pathErr.Unwrap() }; return }
+		if conf, err = os.ReadFile(configurationFileName); err != nil { if pathErr, ok := err.(*os.PathError); ok { return pathErr.Unwrap() }; return }
 		if conf[0] == '{' { err = json.Unmarshal(conf, c) } else { err = yaml.Unmarshal(conf, c) }														// JSON or YAML
 		if err != nil { return }
 	}

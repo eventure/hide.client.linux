@@ -88,13 +88,13 @@ func ( c *Connection ) StateNotifyFnAdd( stateNotifyFn *func( state *State ) ) {
 func ( c *Connection ) StateNotifyFnDel( stateNotifyFn *func( state *State ) ) { c.stateNotifyLock.Lock(); c.stateNotifyFns = slices.DeleteFunc( c.stateNotifyFns, func( fn *func( state *State ) ) bool { return fn == stateNotifyFn } ); c.stateNotifyLock.Unlock() }
 
 func ( c *Connection ) Init() ( err error ) {
-	defer func() { if err != nil { c.Shutdown() } } ()																							// If anything fails, undo changes
+	defer func() { if err != nil { log.Println( "Init [ERR]: Failed with", err ); c.Shutdown() } else { log.Println( "Init: Done" ) } } ()		// When something fails, undo changes
 	c.Lock(); defer c.Unlock()
 
 	c.link = wireguard.New( c.Config.Wireguard )
 	if err = c.link.Open(); err != nil { log.Println( "Init: [ERR] Wireguard open failed:", err ); return }										// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
 	c.initStack = append( c.initStack, c.link.Close )
-	defer c.StateNotify( c.state.SetCode( Routed ) )																							// Make sure to set state to "routed" so that the initStack may be unwound in Shutdown
+	defer c.state.SetCode( Routed )																												// Make sure to set state to "routed" so that the initStack may be unwound in Shutdown
 
 	c.dohResolver = doh.New( c.Config.DoH )
 	c.dohResolver.Init()																														// Initialize DoHResolver
@@ -123,8 +123,6 @@ func ( c *Connection ) Init() ( err error ) {
 	err = c.link.RulesAdd()																														// Add the RPDB rules which direct traffic to configured routing tables
 	c.initStack = append( c.initStack, c.link.RulesDel )
 	if err != nil { log.Println( "Init: [ERR] RPDB rules failed:", err ); return }
-
-	log.Println( "Init: Done" )
 	return
 }
 
@@ -247,15 +245,25 @@ func ( c *Connection ) AccessTokenRefresh() {
 
 func ( c *Connection ) AccessTokenFetch() ( accessToken string, err error ) {
 	c.Lock(); defer c.Unlock()
-	restClient := rest.New( c.Config.Rest )
-	if err = restClient.Init(); err != nil { log.Println( "AcFe: REST client failed:", err ); return }
+	
+	newRestConfig := *c.Config.Rest																													// Duplicate config since ExternalIps changes Port, CA and Host fields
+	client := rest.New( &newRestConfig )																											// Create a REST client (must be a new one since externalIps changes client's configuration)
+	dohResolver := doh.New( c.Config.DoH )																											// Create a DoH resolver
+	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }					// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
+	
+	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback)
+	if err = plainResolver.Init(); err != nil { log.Println( "AccessTokenFetch: [ERR] Plain resolver failed:", err ); return }						// Initialize Plain resolver
+	client.SetPlainResolver( plainResolver )																										// Attach the Plain resolver
+	
+	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }											// DoH or Plain resolution throw routes required when leak protection mode active in routed state
+	
+	if err = client.Init(); err != nil { log.Println( "AcFe: REST client failed:", err ); return }
 	ctx, cancel := context.WithTimeout( context.Background(), c.Config.Rest.RestTimeout )
 	defer cancel()
-	c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )																			// TokenUpdate is a temporary client state
-	if err = restClient.Resolve( ctx ); err != nil {  log.Println( "AcFe: [ERR] Access-Token fetch ( resolve ) failed:", err ); return }
-	if accessToken, err = restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcFe: [ERR] Access-Token fetch failed:", err ); return }
+	c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } ); defer c.StateNotify( c.state )												// TokenUpdate is a temporary client state
+	if err = client.Resolve( ctx ); err != nil {  log.Println( "AcFe: [ERR] Access-Token fetch ( resolve ) failed:", err ); return }
+	if accessToken, err = client.GetAccessToken( ctx ); err != nil { log.Println( "AcFe: [ERR] Access-Token fetch failed:", err ); return }
 	c.Config.Rest.AccessToken = accessToken
-	c.StateNotify( c.state )																													// Broadcast our state
 	log.Println( "AcFe: Access-Token updated" )
 	return
 }

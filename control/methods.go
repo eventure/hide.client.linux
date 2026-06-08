@@ -193,6 +193,29 @@ func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
 	return
 }
 
+func ( s *Server ) requestToken( writer http.ResponseWriter, request *http.Request ) {
+	if request.Method != "POST" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	select {
+		case s.connectionOpsLock <- struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
+	writer.Header().Add( "content-type", "application/json" )
+	config := rest.Config{}																																// Just a subset of rest.Config{} attributes gets used (Host, Username and Password)
+	if err := json.NewDecoder( request.Body ).Decode( &config ); err != nil { writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json() ); return }
+	s.connection.Lock()
+	restConfigBackup := *s.connection.Config.Rest
+	defer func() { s.connection.Lock(); *s.connection.Config.Rest = restConfigBackup; s.connection.Unlock() } ()
+	s.connection.Config.Rest.Host = config.Host
+	s.connection.Config.Rest.Username = config.Username
+	s.connection.Config.Rest.Password = config.Password
+	s.connection.Config.Rest.AccessTokenPath = ""
+	s.connection.Unlock()
+	switch accessToken, err := s.connection.AccessTokenFetch(); err {
+		case nil: writer.Write( Result{ Result: accessToken }.Json() )
+		default:  writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json() )
+	}
+}
+
 func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
 	logs := []byte( nil )
 	if ringLog, ok := log.Writer().( *RingLog ); ok { logs = ringLog.Dump() }
