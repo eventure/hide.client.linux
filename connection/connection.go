@@ -45,7 +45,7 @@ func ( s *State ) SetCode( code string ) *State { s.Code, s.Timestamp = code, ti
 
 type Config struct {
 	Rest			*rest.Config
-	Wireguard		*wireguard.Config
+	WireGuard		*wireguard.Config
 	DoH				*doh.Config
 	Plain			*plain.Config
 }
@@ -91,7 +91,7 @@ func ( c *Connection ) Init() ( err error ) {
 	defer func() { if err != nil { log.Println( "Init [ERR]: Failed with", err ); c.Shutdown() } else { log.Println( "Init: Done" ) } } ()		// When something fails, undo changes
 	c.Lock(); defer c.Unlock()
 
-	c.link = wireguard.New( c.Config.Wireguard )
+	c.link = wireguard.New( c.Config.WireGuard )
 	if err = c.link.Open(); err != nil { log.Println( "Init: [ERR] Wireguard open failed:", err ); return }										// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
 	c.initStack = append( c.initStack, c.link.Close )
 	defer c.state.SetCode( Routed )																												// Make sure to set state to "routed" so that the initStack may be unwound in Shutdown

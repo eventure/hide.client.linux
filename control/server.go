@@ -22,6 +22,7 @@ type Config struct {
 
 type Server struct {
 	*Config
+	serverConfiguration	ServerConfiguration
 
 	listener			net.Listener
 	server				*http.Server
@@ -33,10 +34,17 @@ type Server struct {
 	connectionOpsLock	chan struct{}
 }
 
-func New( controlConfig *Config, connectionConfig *connection.Config ) *Server {
+type ServerConfiguration interface {
+	GetConnectionConfiguration() *connection.Config
+	GetControlConfiguration() *Config
+	SaveJson() error
+}
+
+func New( serverConfiguration ServerConfiguration ) *Server {
+	controlConfig, connectionConfig := serverConfiguration.GetControlConfiguration(), serverConfiguration.GetConnectionConfiguration()
 	if controlConfig == nil { controlConfig = &Config{} }
 	if connectionConfig == nil { connectionConfig = &connection.Config{} }
-	return &Server{ Config: controlConfig, connection: connection.New( connectionConfig ), connectionOpsLock: make(chan struct{}, 1) }
+	return &Server{ Config: controlConfig, serverConfiguration: serverConfiguration, connection: connection.New( connectionConfig ), connectionOpsLock: make(chan struct{}, 1) }
 }
 
 func ( s *Server ) Init() ( err error ) {

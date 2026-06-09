@@ -83,9 +83,9 @@ func main() {
 	
 	switch flag.Arg(0) {
 		case "conf": conf.Print(); return
-		case "jsonconf": conf.PrintJson(); return
+		case "jsonconf", "jsonConf", "json": conf.PrintJson(); return
 		case "service":
-			controlServer = control.New( conf.Control, &connection.Config{ Rest: conf.Rest, Wireguard: conf.WireGuard, DoH: conf.DoH, Plain: conf.Plain } )
+			controlServer = control.New( conf )
 			if err = controlServer.Init(); err != nil { log.Println( "Main: [ERR] Control server initialization failed" ); return }
 			go controlServer.Serve()
 		case "token", "categories", "connect":
@@ -95,7 +95,7 @@ func main() {
 				case "token": _ = accessToken( conf ); return																				// Access-Token
 				case "categories": categories( conf ); return																				// Fetch the filtering categories JSON
 				case "connect":																												// Connect to the server
-					c = connection.New( &connection.Config{ Rest: conf.Rest, Wireguard: conf.WireGuard, DoH: conf.DoH, Plain: conf.Plain } )
+					c = connection.New( conf.Config )
 					if err = c.Init(); err != nil { log.Println( "Main: [ERR] Connect init failed", err.Error() ); return }
 					c.NotifySystemd( true )
 					c.ScheduleConnect(0)
@@ -117,7 +117,7 @@ func main() {
 			return
 		case "lookup":
 			if len( flag.Arg(1) ) == 0 { flag.Usage(); return }
-			plainResolver := plain.New(conf.Plain)
+			plainResolver := plain.New( conf.Plain )
 			if err = plainResolver.Init(); err != nil { log.Println( "Main: [ERR] Plain resolver init failed", err ); return }
 			switch ips, err := plainResolver.Resolve( context.Background(), flag.Arg(1) ); err {
 				case nil:	log.Println( "Main: Resolved", flag.Arg(1), "to", ips )

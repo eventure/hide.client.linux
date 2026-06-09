@@ -163,8 +163,7 @@ func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
 	var stateNotifyFn func( state *connection.State )
 	stateNotifyFn = func( state *connection.State ) {
 		stateJson, _ := json.Marshal( state )
-		stateJson = append( stateJson, '\n' )
-		if _, err := writer.Write( stateJson ); err != nil { s.connection.StateNotifyFnDel( &stateNotifyFn ); wg.Done(); return }
+		if _, err := writer.Write( append( stateJson, '\n' ) ); err != nil { s.connection.StateNotifyFnDel( &stateNotifyFn ); wg.Done(); return }
 		flusher.Flush()
 	}
 	s.connection.StateNotifyFnAdd( &stateNotifyFn )

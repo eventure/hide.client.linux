@@ -7,7 +7,8 @@ import (
 	"log"
 	"os"
 	"time"
-
+	
+	"github.com/eventure/hide.client.linux/connection"
 	flag "github.com/spf13/pflag"
 
 	"github.com/eventure/hide.client.linux/control"
@@ -18,78 +19,80 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-type Configuration struct {
-	Rest		*rest.Config		`yaml:"client,omitempty" json:",omitempty"`
-	WireGuard	*wireguard.Config	`yaml:"link,omitempty" json:",omitempty"`
-	Control		*control.Config		`yaml:"control,omitempty" json:",omitempty"`
-	DoH			*doh.Config			`yaml:"doh,omitempty" json:",omitempty"`
-	Plain		*plain.Config		`yaml:"plain,omitempty" json:",omitempty"`
-}
-
 var configurationFileName string
 
-func NewConfiguration() *Configuration {
-	h := &Configuration{														// Defaults
-		WireGuard: &wireguard.Config{
-			Name:					"vpn",										// command line option "-i"
-			ListenPort:				0,											// command line option "-l"
-			Mark:					0,											// command line option "-m"
-			RoutingTable:			55555,										// command line option "-r"
-			RPDBPriority:			10,											// command line option "-R"
-			LeakProtection:			true,										// command line option "-k"
-			ResolvConfBackupFile:	"",											// command line option "-b"
-			DpdTimeout:				time.Minute,								// command line option "--dpd"
-			SplitTunnel:			"",											// command line option "-s"
-			IPv4:					true,										// command line options "-4" and "-6"
-			IPv6:					true,										// command line options "-4" and "-6"
-		},
-		Rest: &rest.Config{
-			APIVersion:				"v1.0.0",									// Not configurable
-			Host:           		"",											// command line option "-n"
-			Port:					432,										// command line option "-p"
-			Domain:					"hide.me",									// Not configurable
-			CA:						"CA.pem",									// command line option "--ca"
-			AccessTokenPath:		"accessToken.txt",							// command line option "-t"
-			Username:       		"",											// command line option "-u"
-			Password:				"",											// Only configurable through the config file
-			RestTimeout:	 		90 * time.Second,							// Command line option "--rest-timeout"
-			ReconnectWait:	 		30 * time.Second,							// Only configurable through the config file
-			AccessTokenUpdateDelay: 2 * time.Second,							// Only configurable through the config file
-			Mark:					0,											// command line option "-m"
-			UseDoH:					true,										// command line option "--doh"
+type Configuration struct {
+	*connection.Config
+	Control		*control.Config		`yaml:"control,omitempty" json:",omitempty"`
+}
+
+func (c *Configuration) GetConnectionConfiguration() *connection.Config { return c.Config }
+func (c *Configuration) GetControlConfiguration() *control.Config { return c.Control }
+
+func NewConfiguration() *Configuration {										// Defaults
+	h := &Configuration{
+		Config: &connection.Config {
+			WireGuard: &wireguard.Config{
+				Name:					"vpn",									// command line option "-i"
+				ListenPort:				0,										// command line option "-l"
+				Mark:					0,										// command line option "-m"
+				RoutingTable:			55555,									// command line option "-r"
+				RPDBPriority:			10,										// command line option "-R"
+				LeakProtection:			true,									// command line option "-k"
+				ResolvConfBackupFile:	"",										// command line option "-b"
+				DpdTimeout:				time.Minute,							// command line option "--dpd"
+				SplitTunnel:			"",										// command line option "-s"
+				IPv4:					true,									// command line options "-4" and "-6"
+				IPv6:					true,									// command line options "-4" and "-6"
+			},
+			Rest: &rest.Config{
+				APIVersion:				"v1.0.0",								// Not configurable
+				Host:           		"",										// command line option "-n"
+				Port:					432,									// command line option "-p"
+				Domain:					"hide.me",								// Not configurable
+				CA:						"CA.pem",								// command line option "--ca"
+				AccessTokenPath:		"accessToken.txt",						// command line option "-t"
+				Username:       		"",										// command line option "-u"
+				Password:				"",										// Only configurable through the config file
+				RestTimeout:	 		90 * time.Second,						// Command line option "--rest-timeout"
+				ReconnectWait:	 		30 * time.Second,						// Only configurable through the config file
+				AccessTokenUpdateDelay: 2 * time.Second,						// Only configurable through the config file
+				Mark:					0,										// command line option "-m"
+				UseDoH:					true,									// command line option "--doh"
+			},
+			DoH: &doh.Config {
+				Servers: []string{
+					"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEwLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns10.quad9.net:443/dns-query 149.112.112.10:443
+					"sdns://AgYAAAAAAAAACDkuOS45LjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEwLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns10.quad9.net:443/dns-query 9.9.9.10:443
+					"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEwLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns10.quad9.net:5053/dns-query 149.112.112.10:443
+					"sdns://AgYAAAAAAAAACDkuOS45LjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEwLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns10.quad9.net:5053/dns-query 9.9.9.10:443
+					"sdns://AgMAAAAAAAAADjE0OS4xMTIuMTEyLjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczExLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns11.quad9.net:443/dns-query 149.112.112.11:443
+					"sdns://AgMAAAAAAAAACDkuOS45LjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczExLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns11.quad9.net:443/dns-query 9.9.9.11:443
+					"sdns://AgMAAAAAAAAADjE0OS4xMTIuMTEyLjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczExLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns11.quad9.net:5053/dns-query 149.112.112.11:443
+					"sdns://AgMAAAAAAAAACDkuOS45LjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczExLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns11.quad9.net:5053/dns-query 9.9.9.11:443
+					"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEyLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns12.quad9.net:443/dns-query 149.112.112.12:443
+					"sdns://AgYAAAAAAAAACDkuOS45LjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEyLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns12.quad9.net:443/dns-query 9.9.9.12:443
+					"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEyLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns12.quad9.net:5053/dns-query 149.112.112.12:443
+					"sdns://AgYAAAAAAAAACDkuOS45LjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEyLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns12.quad9.net:5053/dns-query 9.9.9.12:443
+					"sdns://AgMAAAAAAAAADTE0OS4xMTIuMTEyLjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8SZG5zOS5xdWFkOS5uZXQ6NDQzCi9kbnMtcXVlcnk",			// dns9.quad9.net:443/dns-query 149.112.112.9:443
+					"sdns://AgMAAAAAAAAABzkuOS45LjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8SZG5zOS5xdWFkOS5uZXQ6NDQzCi9kbnMtcXVlcnk",					// dns9.quad9.net:443/dns-query 9.9.9.9:443
+					"sdns://AgMAAAAAAAAADTE0OS4xMTIuMTEyLjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8TZG5zOS5xdWFkOS5uZXQ6NTA1MwovZG5zLXF1ZXJ5",			// dns9.quad9.net:5053/dns-query 149.112.112.9:443
+					"sdns://AgMAAAAAAAAABzkuOS45LjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8TZG5zOS5xdWFkOS5uZXQ6NTA1MwovZG5zLXF1ZXJ5",					// dns9.quad9.net:5053/dns-query 9.9.9.9:443
+					"sdns://AgMAAAAAAAAADzE0OS4xMTIuMTEyLjExMiCwGSB0S7t2yasFPgHge34FDkc9IPefe-pDX6_kPJ0kLxFkbnMucXVhZDkubmV0OjQ0MwovZG5zLXF1ZXJ5",			// dns.quad9.net:443/dns-query 149.112.112.112:443
+					"sdns://AgMAAAAAAAAADzE0OS4xMTIuMTEyLjExMiCwGSB0S7t2yasFPgHge34FDkc9IPefe-pDX6_kPJ0kLxJkbnMucXVhZDkubmV0OjUwNTMKL2Rucy1xdWVyeQ",		// dns.quad9.net:5053/dns-query 149.112.112.112:443
+				},
+				UpdateURLs: []string{
+					"https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md",
+				},
+				Filename: "resolvers.txt",
+			},
+			Plain: &plain.Config{
+				Servers: []string{ "209.250.251.37:53", "217.182.206.81:53" },
+			},
 		},
 		Control: &control.Config{
 			Address:				"@hide.me",									// command line option "-caddr"
 			LineLogBufferSize:		65535,										// command like option "-cllbs". Log buffer will remember 65536 log lines, when set to 0 there will be no buffering
-		},
-		DoH: &doh.Config {
-			Servers: []string{
-				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEwLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns10.quad9.net:443/dns-query 149.112.112.10:443
-				"sdns://AgYAAAAAAAAACDkuOS45LjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEwLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns10.quad9.net:443/dns-query 9.9.9.10:443
-				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEwLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns10.quad9.net:5053/dns-query 149.112.112.10:443
-				"sdns://AgYAAAAAAAAACDkuOS45LjEwILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEwLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns10.quad9.net:5053/dns-query 9.9.9.10:443
-				"sdns://AgMAAAAAAAAADjE0OS4xMTIuMTEyLjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczExLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns11.quad9.net:443/dns-query 149.112.112.11:443
-				"sdns://AgMAAAAAAAAACDkuOS45LjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczExLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns11.quad9.net:443/dns-query 9.9.9.11:443
-				"sdns://AgMAAAAAAAAADjE0OS4xMTIuMTEyLjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczExLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns11.quad9.net:5053/dns-query 149.112.112.11:443
-				"sdns://AgMAAAAAAAAACDkuOS45LjExILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczExLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns11.quad9.net:5053/dns-query 9.9.9.11:443
-				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEyLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",		// dns12.quad9.net:443/dns-query 149.112.112.12:443
-				"sdns://AgYAAAAAAAAACDkuOS45LjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvE2RuczEyLnF1YWQ5Lm5ldDo0NDMKL2Rucy1xdWVyeQ",				// dns12.quad9.net:443/dns-query 9.9.9.12:443
-				"sdns://AgYAAAAAAAAADjE0OS4xMTIuMTEyLjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEyLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",		// dns12.quad9.net:5053/dns-query 149.112.112.12:443
-				"sdns://AgYAAAAAAAAACDkuOS45LjEyILAZIHRLu3bJqwU-AeB7fgUORz0g95976kNfr-Q8nSQvFGRuczEyLnF1YWQ5Lm5ldDo1MDUzCi9kbnMtcXVlcnk",				// dns12.quad9.net:5053/dns-query 9.9.9.12:443
-				"sdns://AgMAAAAAAAAADTE0OS4xMTIuMTEyLjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8SZG5zOS5xdWFkOS5uZXQ6NDQzCi9kbnMtcXVlcnk",			// dns9.quad9.net:443/dns-query 149.112.112.9:443
-				"sdns://AgMAAAAAAAAABzkuOS45LjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8SZG5zOS5xdWFkOS5uZXQ6NDQzCi9kbnMtcXVlcnk",					// dns9.quad9.net:443/dns-query 9.9.9.9:443
-				"sdns://AgMAAAAAAAAADTE0OS4xMTIuMTEyLjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8TZG5zOS5xdWFkOS5uZXQ6NTA1MwovZG5zLXF1ZXJ5",			// dns9.quad9.net:5053/dns-query 149.112.112.9:443
-				"sdns://AgMAAAAAAAAABzkuOS45LjkgsBkgdEu7dsmrBT4B4Ht-BQ5HPSD3n3vqQ1-v5DydJC8TZG5zOS5xdWFkOS5uZXQ6NTA1MwovZG5zLXF1ZXJ5",					// dns9.quad9.net:5053/dns-query 9.9.9.9:443
-				"sdns://AgMAAAAAAAAADzE0OS4xMTIuMTEyLjExMiCwGSB0S7t2yasFPgHge34FDkc9IPefe-pDX6_kPJ0kLxFkbnMucXVhZDkubmV0OjQ0MwovZG5zLXF1ZXJ5",			// dns.quad9.net:443/dns-query 149.112.112.112:443
-				"sdns://AgMAAAAAAAAADzE0OS4xMTIuMTEyLjExMiCwGSB0S7t2yasFPgHge34FDkc9IPefe-pDX6_kPJ0kLxJkbnMucXVhZDkubmV0OjUwNTMKL2Rucy1xdWVyeQ",		// dns.quad9.net:5053/dns-query 149.112.112.112:443
-			},
-			UpdateURLs: []string{
-				"https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md",
-			},
-			Filename: "resolvers.txt",
-		},
-		Plain: &plain.Config{
-			Servers: []string{ "209.250.251.37:53", "217.182.206.81:53" },
 		},
 	}
 	return h
