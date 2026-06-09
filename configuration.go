@@ -110,7 +110,7 @@ func ( c *Configuration ) SaveJson() error {
 }
 
 func ( c *Configuration ) Parse() ( err error ) {
-	configurationFileName = *flag.StringP( "config", "c", "", "Configuration `filename`" )																// Configuration flag
+	flag.StringVarP		( &configurationFileName,			"config", "c",			"", "Configuration `filename`" )									// Configuration flag
 
 	flag.IntVarP		( &c.Rest.Port,						"port",	"p",			c.Rest.Port, "remote `port`" )										// REST flags
 	flag.StringVar		( &c.Rest.CA,						"ca",					c.Rest.CA, "CA certificate bundle `filename`" )

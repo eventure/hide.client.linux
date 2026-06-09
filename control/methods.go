@@ -37,7 +37,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			writer.WriteHeader( http.StatusOK )
 			encoder := json.NewEncoder( writer )
 			s.connection.Lock(); defer s.connection.Unlock()
-			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configure failed: ", err ); return }
+			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configuration GET failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
 		case "POST":
@@ -45,13 +45,14 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 8192 ), logBuffer ) )
 			s.connection.Lock(); defer s.connection.Unlock()
 			if err := decoder.Decode( s.connection.Config ); err != nil {
-				log.Println( "Serv: [ERR] Configure failed:", err )
+				log.Println( "Serv: [ERR] Configuration POST failed:", err )
 				writer.WriteHeader( http.StatusBadRequest )
 				writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
 				return
 			}
 			log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
-			writer.WriteHeader( http.StatusOK )
+			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "Serv: [ERR] Configuration save failed:", err ) }
+			writer.WriteHeader( http.StatusOK )																											// Return 200 OK even though SaveJson might have failed. After all, configuration was updated
 			writer.Write( Result{ Result: true }.Json() )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
 		default: http.Error( writer, "not found", http.StatusNotFound )
@@ -280,7 +281,7 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
 	}
 	
-	ctx, cancel := context.WithTimeout( context.Background(), s.connection.Config.Rest.RestTimeout )
+	ctx, cancel := context.WithTimeout( context.Background(), time.Second * 5 )
 	defer cancel()
 	log.Println( "exIp: Performing External IP lookups" )
 	ips := s.connection.ExternalIps( ctx )
