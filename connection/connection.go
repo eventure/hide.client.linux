@@ -30,6 +30,7 @@ const (
 	Disconnecting = "disconnecting"
 	DpdTimeout = "dpd timeout"
 	DnsLookup = "dns lookup"
+	ExternalIps = "external ips"
 )
 
 type State struct {
@@ -39,6 +40,8 @@ type State struct {
 	Rx				int64		`json:"rx,omitempty"`
 	Tx				int64		`json:"tx,omitempty"`
 	Host			string		`json:"host,omitempty"`
+	ExternalIpv4	net.IP		`json:"external_ip,omitempty"`
+	ExternalIpv6	net.IP		`json:"external_ipv6,omitempty"`
 }
 
 func ( s *State ) SetCode( code string ) *State { s.Code, s.Timestamp = code, time.Now(); return s }
@@ -288,7 +291,7 @@ func ( c *Connection ) PortForward() {
 	}
 }
 
-func ( c *Connection ) ExternalIps( ctx context.Context ) ( ips []net.IP ) {
+func ( c *Connection ) ExternalIPs() ( err error ) {
 	c.Lock(); defer c.Unlock()
 	
 	newRestConfig := *c.Config.Rest																													// Duplicate config since ExternalIps changes Port, CA and Host fields
@@ -297,16 +300,37 @@ func ( c *Connection ) ExternalIps( ctx context.Context ) ( ips []net.IP ) {
 	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }					// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
 
 	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback)
-	if err := plainResolver.Init(); err != nil { log.Println( "ExternalIps: [ERR] Plain resolver failed:", err ); return }							// Initialize Plain resolver
+	if err = plainResolver.Init(); err != nil { log.Println( "ExIP: [ERR] Plain resolver failed:", err ); return }									// Initialize the Plain resolver
 	client.SetPlainResolver( plainResolver )																										// Attach the Plain resolver
 
-	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }											// DoH or Plain resolution throw routes required when leak protection mode active in routed state
-	
-	return client.ExternalIps( ctx, func( route bool, ip net.IP ) error {
-		if c.state.Code != Routed { return nil }																									// Throw routes required when leak protection mode active in routed state
-		if c.link.Config.Mark != 0 { return nil }																									// When marks are used no throw routes are required
-		if route { return c.link.ThrowRouteAdd( "External IP", wireguard.Ip2Net( ip ) ) } else { return c.link.ThrowRouteDel( "External IP", wireguard.Ip2Net( ip ) ) }
-	})
+	code, mark, link := c.state.Code, 0, ( *wireguard.Link )( nil )																					// Snapshot code to make sure we remove throw routes even when state changes to something like clean or connected
+	if code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ); mark, link = c.link.Config.Mark, c.link }			// DoH or Plain resolution throw routes required when leak protection mode active in routed state
+
+	c.state.ExternalIpv4, c.state.ExternalIpv6 = nil, nil																							// Clear previously discovered external IPs
+	go func() {
+		ctx, cancel := context.WithTimeout( context.Background(), time.Second * 5 )
+		defer cancel()
+		_ = client.ExternalIps( ctx, func( route bool, ip net.IP ) error {
+			if code != Routed { return nil }																										// Throw routes required when leak protection mode active in routed state
+			if mark != 0 { return nil }																												// When marks are used no throw routes are required
+			if route { return link.ThrowRouteAdd( "External IP", wireguard.Ip2Net( ip ) ) } else { return link.ThrowRouteDel( "External IP", wireguard.Ip2Net( ip ) ) }
+		}, func( ip net.IP ) {
+			log.Println( "ExIP: Retrieved", ip )
+			c.Lock(); c.state.ExternalIpv4 = ip; c.Unlock()
+		}, func( ip net.IP ) {
+			log.Println( "ExIP: Retrieved", ip )
+			c.Lock(); c.state.ExternalIpv6 = ip; c.Unlock()
+		})
+		log.Println( "ExIP: Sending notifications" )
+		
+		c.Lock(); defer c.Unlock()
+		
+		oldStateCode := c.state.Code
+		c.state.Code = ExternalIps
+		c.StateNotify( c.state )																													// Send the new state
+		c.state.Code = oldStateCode
+	}()
+	return
 }
 
 func ( c *Connection ) DPD() {

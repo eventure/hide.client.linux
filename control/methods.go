@@ -281,15 +281,12 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
 	}
 	
-	ctx, cancel := context.WithTimeout( context.Background(), time.Second * 5 )
-	defer cancel()
 	log.Println( "exIp: Performing External IP lookups" )
-	ips := s.connection.ExternalIps( ctx )
+	if err := s.connection.ExternalIPs(); err != nil { log.Println( "exIp: [ERR] External IP lookup failed:", err ); http.Error( writer, err.Error(), http.StatusInternalServerError ); return }
 	
 	writer.Header().Add( "content-type", "application/json" )
-	if err := json.NewEncoder( writer ).Encode( ips ); err != nil { log.Println( "exIp: [ERR] External IP response send failed:", err ); http.Error( writer, err.Error(), http.StatusInternalServerError ); return }
-	
-	log.Println( "exIP: External IPs", ips, "sent" )
+	writer.WriteHeader( http.StatusOK )
+	log.Println( "exIP: Async external IP lookup started" )
 }
 
 func ( s *Server ) version(writer http.ResponseWriter, request *http.Request ) {
