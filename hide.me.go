@@ -139,7 +139,7 @@ func main() {
 	for sig := range signalChannel {
 		switch sig {
 			case syscall.SIGINT, syscall.SIGTERM:
-				if c != nil { c.Disconnect(); c.Shutdown() }
+				if c != nil { c.Disconnect( false ); c.Shutdown( true ) }
 				if controlServer != nil { controlServer.Shutdown() }
 				return
 			default: return

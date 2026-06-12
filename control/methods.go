@@ -114,7 +114,7 @@ func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request
 	}
 	
 	writer.Header().Add( "content-type", "application/json" )
-	s.connection.Disconnect()
+	s.connection.Disconnect( true )
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 
@@ -125,7 +125,7 @@ func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request )
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
 	}
 	writer.Header().Add( "content-type", "application/json" )
-	s.connection.Shutdown()
+	s.connection.Shutdown( true )
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 
@@ -138,8 +138,8 @@ func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) 
 	}
 	
 	writer.Header().Add( "content-type", "application/json" )
-	s.connection.Disconnect()
-	s.connection.Shutdown()
+	s.connection.Disconnect( false )
+	s.connection.Shutdown( true )
 	writer.Write( Result{ Result: s.connection.State() }.Json() )
 }
 
@@ -183,7 +183,7 @@ func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
 			writer.Write( Result{ Result: os.Remove( s.connection.Config.Rest.AccessTokenPath ) }.Json() )
 		case "GET":
 			writer.Header().Add( "content-type", "application/json" )
-			switch accessToken, err := s.connection.AccessTokenFetch(); err {
+			switch accessToken, err := s.connection.AccessTokenFetch( true ); err {
 				case nil: writer.Write( Result{ Result: accessToken }.Json() )
 				default:  writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json())
 			}
@@ -210,7 +210,7 @@ func ( s *Server ) requestToken( writer http.ResponseWriter, request *http.Reque
 	s.connection.Config.Rest.Password = config.Password
 	s.connection.Config.Rest.AccessTokenPath = ""
 	s.connection.Unlock()
-	switch accessToken, err := s.connection.AccessTokenFetch(); err {
+	switch accessToken, err := s.connection.AccessTokenFetch( true ); err {
 		case nil: writer.Write( Result{ Result: accessToken }.Json() )
 		default:  writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json() )
 	}

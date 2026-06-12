@@ -97,7 +97,7 @@ func ( s *Server ) Serve() ( err error ) {
 }
 
 func ( s *Server ) Shutdown() error {
-	s.connection.Disconnect()
-	s.connection.Shutdown()
+	s.connection.Disconnect( false )
+	s.connection.Shutdown( true )
 	return s.server.Close()
 }

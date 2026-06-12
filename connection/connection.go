@@ -24,6 +24,7 @@ const (
 	Connecting = "connecting"
 	Connected = "connected"
 	TokenUpdate = "token update"
+	TokenUpdateDone = "token update done"
 	ConfigurationGet = "configuration get"
 	ConfigurationSet = "configuration set"
 	LogDump = "logs dumped"
@@ -91,7 +92,7 @@ func ( c *Connection ) StateNotifyFnAdd( stateNotifyFn *func( state *State ) ) {
 func ( c *Connection ) StateNotifyFnDel( stateNotifyFn *func( state *State ) ) { c.stateNotifyLock.Lock(); c.stateNotifyFns = slices.DeleteFunc( c.stateNotifyFns, func( fn *func( state *State ) ) bool { return fn == stateNotifyFn } ); c.stateNotifyLock.Unlock() }
 
 func ( c *Connection ) Init() ( err error ) {
-	defer func() { if err != nil { log.Println( "Init [ERR]: Failed with", err ); c.Shutdown() } else { log.Println( "Init: Done" ) } } ()		// When something fails, undo changes
+	defer func() { if err != nil { log.Println( "Init [ERR]: Failed with", err ); c.Shutdown(true) } else { log.Println( "Init: Done" ) } } ()	// When something fails, undo changes
 	c.Lock(); defer c.Unlock()
 
 	c.link = wireguard.New( c.Config.WireGuard )
@@ -129,13 +130,16 @@ func ( c *Connection ) Init() ( err error ) {
 	return
 }
 
-func ( c *Connection ) Shutdown() {
+func ( c *Connection ) Shutdown( notify bool ) {
 	c.Lock()
 	switch c.state.Code {																														// Shutdown makes sense when Routed
 		case Routed: break
 		default: log.Println( "Disc: [WARN] Called Shutdown while", c.state.Code ); c.Unlock(); return
 	}
-	for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]; c.StateNotify( c.state.SetCode( Clean ) ); c.Unlock()
+	for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]
+	c.state.SetCode( Clean )																													// Set state to Clean
+	if notify { c.StateNotify( c.state ) }
+	c.Unlock()
 }
 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
@@ -149,7 +153,7 @@ func ( c *Connection ) ScheduleConnect( in time.Duration ) {
 func ( c *Connection ) Connect() {
 	var err error
 	defer func() {
-		if err != nil { c.Disconnect() } else { c.StateNotify( c.state ) }																		// Disconnect/rewind stack on error, notify otherwise
+		if err != nil { c.Disconnect( true ) } else { c.StateNotify( c.state ) }																// Disconnect/rewind stack on error, notify otherwise
 		if c.connectNotify != nil { c.connectNotify( err ); c.connectNotify = nil }
 	}()
 	
@@ -209,13 +213,13 @@ func ( c *Connection ) Connect() {
 		log.Println( "Conn: DPD started" )
 	}
 	
-	go c.AccessTokenRefresh()																													// Refresh the Access-Token when required
+	go c.AccessTokenRefresh( true )																												// Refresh the Access-Token when required
 	go c.Filter()																																// Apply possible filters
 	go c.PortForward()																															// Activate port-forwarding
 	c.state.SetCode( Connected )																												// Connection is running now so set state to connected
 }
 
-func ( c *Connection ) Disconnect() {
+func ( c *Connection ) Disconnect( notify bool ) {
 	c.Lock()
 	switch c.state.Code {																														// Disconnect makes sense when Connecting, Connected and on DPD timeout
 		case Connected, Connecting, DpdTimeout: break
@@ -228,45 +232,47 @@ func ( c *Connection ) Disconnect() {
 	c.connectStack = c.connectStack[:0]
 	c.state.ConnectResponse = nil
 	c.state.Rx,c.state.Tx = 0, 0
-	c.StateNotify( c.state.SetCode( Routed ) )																									// Set state to routed
+	c.state.SetCode( Routed )																													// Set state to routed
+	if notify { c.StateNotify( c.state ) }
 	c.Unlock()
 }
 
-func ( c *Connection ) AccessTokenRefresh() {
+func ( c *Connection ) AccessTokenRefresh( notify bool ) {
 	if !c.state.ConnectResponse.StaleAccessToken { return }																						// Access token is not stale
 	if len( c.restClient.Config.AccessTokenPath ) == 0 { return }																				// Access token is not stored
 	log.Println( "AcRe: Updating the Access-Token in", c.restClient.Config.AccessTokenUpdateDelay )
 	time.AfterFunc( c.restClient.Config.AccessTokenUpdateDelay, func() {
 		ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 		defer cancel()
-		c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )																		// TokenUpdate is a temporary client state
+		if notify { c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } ) }														// TokenUpdate is a notification
 		if accessToken, err := c.restClient.GetAccessToken( ctx ); err != nil { log.Println( "AcRe: [ERR] Access-Token update failed:", err ); return } else { c.Config.Rest.AccessToken = accessToken }
 		log.Println( "AcRe: Access-Token updated" )
-		c.StateNotify( c.state )																												// Broadcast our state
+		if notify { c.StateNotify( &State{ Code: TokenUpdateDone, Timestamp: time.Now() } ) }													// TokenUpdateDone is a notification
 	})
 }
 
-func ( c *Connection ) AccessTokenFetch() ( accessToken string, err error ) {
+func ( c *Connection ) AccessTokenFetch( notify bool ) ( accessToken string, err error ) {
 	c.Lock(); defer c.Unlock()
 	
-	newRestConfig := *c.Config.Rest																													// Duplicate config since ExternalIps changes Port, CA and Host fields
-	client := rest.New( &newRestConfig )																											// Create a REST client (must be a new one since externalIps changes client's configuration)
-	dohResolver := doh.New( c.Config.DoH )																											// Create a DoH resolver
-	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }					// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
+	newRestConfig := *c.Config.Rest																												// Duplicate config since ExternalIps changes Port, CA and Host fields
+	client := rest.New( &newRestConfig )																										// Create a REST client (must be a new one since externalIps changes client's configuration)
+	dohResolver := doh.New( c.Config.DoH )																										// Create a DoH resolver
+	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }				// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
 	
-	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback)
-	if err = plainResolver.Init(); err != nil { log.Println( "AccessTokenFetch: [ERR] Plain resolver failed:", err ); return }						// Initialize Plain resolver
-	client.SetPlainResolver( plainResolver )																										// Attach the Plain resolver
+	plainResolver := plain.New( c.Config.Plain )																								// Create a Plain resolver (fallback)
+	if err = plainResolver.Init(); err != nil { log.Println( "AccessTokenFetch: [ERR] Plain resolver failed:", err ); return }					// Initialize Plain resolver
+	client.SetPlainResolver( plainResolver )																									// Attach the Plain resolver
 	
-	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }											// DoH or Plain resolution throw routes required when leak protection mode active in routed state
+	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }										// DoH or Plain resolution throw routes required when leak protection mode active in routed state
 	
 	if err = client.Init(); err != nil { log.Println( "AcFe: REST client failed:", err ); return }
 	ctx, cancel := context.WithTimeout( context.Background(), c.Config.Rest.RestTimeout )
 	defer cancel()
-	c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } ); defer c.StateNotify( c.state )												// TokenUpdate is a temporary client state
+	if notify { c.StateNotify( &State{ Code: TokenUpdate, Timestamp: time.Now() } )	}															// TokenUpdate is a notification
 	if err = client.Resolve( ctx ); err != nil {  log.Println( "AcFe: [ERR] Access-Token fetch ( resolve ) failed:", err ); return }
 	if accessToken, err = client.GetAccessToken( ctx ); err != nil { log.Println( "AcFe: [ERR] Access-Token fetch failed:", err ); return }
 	c.Config.Rest.AccessToken = accessToken
+	if notify { c.StateNotify( &State{ Code: TokenUpdateDone, Timestamp: time.Now() } )	}														// TokenUpdateDone is a notification
 	log.Println( "AcFe: Access-Token updated" )
 	return
 }
@@ -336,13 +342,14 @@ func ( c *Connection ) ExternalIPs() ( err error ) {
 func ( c *Connection ) DPD() {
 	c.Lock()
 	currentRx, err := c.link.GetRx()
-	if err != nil { c.Unlock(); log.Println( "DPD: Failed:", err.Error() ); c.Disconnect(); c.Shutdown(); return }
+	if err != nil { c.Unlock(); log.Println( "DPD: Failed:", err.Error() ); c.Disconnect( true ); return }											// There won't be any reconnect attempts so immediately notify
 	if currentRx == c.lastRx {
 		c.lastRx = 0
 		c.StateNotify( c.state.SetCode( DpdTimeout ) )
 		c.Unlock()
 		log.Println( "DPD: Timeout" )
-		c.Disconnect()
+		c.StateNotify( &State{ Code: DpdTimeout, Timestamp: time.Now() } )																			// Notify about the DPD situation
+		c.Disconnect( false )																														// Connect will be scheduled and it will notify about the possible Disconnected state
 		c.ScheduleConnect( c.restClient.Config.ReconnectWait )
 		return
 	}
