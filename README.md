@@ -104,18 +104,19 @@ Usage:
 ...
 ```
 ### Commands
-hide.me CLI user interface is quite simple. There are just eight commands available:
+hide.me CLI user interface is quite simple. There are just ten commands available:
 ```
 command:
   token - request an Access-Token (required for connect)
   connect - connect to a vpn server
-  conf - generate a configuration file to be used with the -c option
+  conf - generate a YAML configuration file to be used with the -c option
+  jsonconf - generate a JSON configuration file to be used with the -c option
   categories - fetch and dump filtering category list
   service - run in remotely controlled service mode
   updateDoh - update DNS-over-HTTPs server list
   resolve - resolve host using DNS-over-HTTPs
   lookup - resolve host using DNS
-  list - fetch the server list
+  list [free] - fetch the server list (use "free" to list only free servers)
 ```
 To connect to a VPN server, an Access-Token must be requested from a VPN server. The **token** command issues an Access-Token request.
 An Access-Token issued by any server may be used, for authentication, with any other hide.me VPN server.
@@ -138,6 +139,7 @@ Note that there are a few options which are configurable only through the config
 * Password - **DANGEROUS**, do not use this option unless you're aware of the security implications 
 * ConnectTimeout
 * AccessTokenUpdateDelay
+* ReconnectWait
 ```
 host:
   fqdn, short name or an IP address of a hide.me server
@@ -176,7 +178,7 @@ This approach not only secures DNS requests but distributes them across multiple
 
 ### Options
 ```
-  -4    Use IPv4 tunneling only
+  -4, --ipv4-only    Use IPv4 tunneling only
 ```
 Limit all IP protocol operations to IPv4. Even though the server will provide IPv4 and IPv6 addressing only IPv4
 addresses, IPv4 rules and IPv4 routes get installed. Leak protection/kill-switch works for IPv4 traffic only. IPv6 
@@ -185,7 +187,7 @@ traffic flow remains unsecured.
 **WARNING**: This option degrades security and should be used only when it's safe to do so, e.g. when the client machine
 has it's IPv6 stack disabled. Please, do not use it otherwise because IPv6 leaks may happen.
 ```
-  -6   	Use IPv6 tunneling only
+  -6, --ipv6-only    Use IPv6 tunneling only
 ```
 Limit all IP protocol operations to IPv6. Even though the server will provide IPv4 and IPv6 addressing only IPv6
 addresses, IPv6 rules and IPv6 routes get installed. Leak protection/kill-switch works for IPv6 traffic only. IPv4 
@@ -193,18 +195,18 @@ traffic flow remains unsecured.
 
 **WARNING**: This option degrades security and should not be used unless the client wishes to tunnel the IPv6 traffic only.
 ```
-  -b filename
+  -b, --resolv-conf-bak filename
     	resolv.conf backup filename (default "")
 ```
 Hide.me CLI keeps a backup of /etc/resolv.conf in memory. In addition to that backup hide.me CLI may back up /etc/resolv.conf
 to a file specified by this option.
 ```
-  -c filename
+  -c, --config filename
     	Configuration filename
 ```
-Use a configuration file named "filename".
+Use a configuration file named "filename". Both YAML and JSON formats are supported.
 ```
-  --ca string
+  --ca filename
     	CA certificate bundle (default "CA.pem")
 ```
 During TLS negotiation the VPN server's certificate needs to be verified. This option makes it possible to specify
@@ -213,33 +215,34 @@ an alternate CA certificate bundle file.
   --caddr address
     	Control interface listen address (default "@hide.me")
 ```
-Set the service mode control interface listen address. hide.me CLI, by default, listens on an abstract UNIX socket hide.me 
+Set the service mode control interface (API) listen address. hide.me CLI, by default, listens on an abstract UNIX socket hide.me.
 ```
   --ccert certificate
     	Control interface certificate file
 ```
-Set the service mode control interface X509 certificate in PEM format
+Set the service mode control interface (API) X509 certificate in PEM format.
 ```
   --ckey key
     	Control interface key file
 ```
-Set the service mode control interface private key in PEM format
+Set the service mode control interface (API) private key in PEM format.
 ```
   --cllbs size
-    	Control interface line log buffer size
+    	Control interface line log buffer size (default 65535)
 ```
-Set the service mode control interface line log buffer size
+Set the service mode control interface (API) line log buffer size.
 ```
-  -d DNS servers
+  --dns servers
     	comma separated list of DNS servers used for client requests (default "209.250.251.37:53,217.182.206.81:53")
 ```
 Hide.me CLI may use hide.me operated DNS servers to resolve VPN server names when requesting a token or during
-connect requests. The set of DNS servers used for these purposes may be customized with this option. Note that DoH resolution takes precedence unless disabled.
+connect requests. The set of DNS servers used for these purposes may be customized with this option. Note that
+DNS-over-HTTPS resolution takes precedence unless disabled.
 ```
   --doh
-    	Use DNS-over-HTTPs
+    	Use DNS-over-HTTPs (default true)
 ```
-Hide.me CLI prioritizes DNS-over-HTTPs servers for DNS resolution purposes. This option disables DNS-over-HTTPs.
+Hide.me CLI uses DNS-over-HTTPS servers for DNS resolution by default. To disable DoH, use `--doh=false`.
 ```
   --dpd duration
     	DPD timeout (default 1m0s)
@@ -247,60 +250,70 @@ Hide.me CLI prioritizes DNS-over-HTTPs servers for DNS resolution purposes. This
 In order to detect if a connection has stalled, usually due to networking issues, hide.me CLI periodically checks
 the connection state. The checking period can be changed with this option, but can't be higher than a minute.
 ```
-  -i interface
+  -i, --interface interface
     	network interface name (default "vpn")
 ```
 Use this option to specify the name of the networking interface to create or use.
 ```
-  -k
-    	enable/disable leak protection a.k.a. kill-switch
+  -k, --kill-switch
+    	enable/disable leak protection a.k.a. kill-switch (default true)
 ```
 Enable/disable kill-switch. Enabled by default.
 ```
-  -l port
-    	listen port
+  -l, --listen-port port
+    	wireguard listen port
 ```
 Specify a listen port for encrypted WireGuard traffic.
 ```
-  -m mark
+  -m, --firewall-mark mark
     	firewall mark for wireguard and hide.me client originated traffic
 ```
 Set the firewall mark the WireGuard kernel module will mark its packets with.
 ```
-  -p port
+  -p, --port port
     	remote port (default 432)
 ```
 Remote REST endpoint port may be changed with this option.
+```
+  -P, --password password
+        hide.me password
+```
+Set hide.me password. **DANGEROUS** — do not use this option unless you're aware of the security implications (password visible in process list). Prefer interactive credential entry or configuration file instead.
 ```
   --pf
     	enable dynamic port-forwarding technologies (uPnP and NAT-PMP)
 ```
 Dynamic port-forwarding is, by default, disabled. Use this option to turn it on for a particular connection attempt.
 Alternatively, port-forwarding may be enabled by adding a **@pf** suffix to the username when requesting a token. Such tokens
-activate port-forwarding on each connection attempt, and you should not use this option when using them.   
+activate port-forwarding on each connection attempt, and you should not use this option when using them.
 ```
-  -r table
+  -r, --routing-table table
     	routing table to use (default 55555)
 ```
 Set the routing table to use for general traffic and leak protection mechanism.
 ```
-  -R priority
+  --rest-timeout duration
+        REST call timeout (default 1m30s)
+```
+Set the timeout for REST API calls (token requests, connect handshake, etc.).
+```
+  -R, --rule-priority priority
     	RPDB rule priority (default 10)
 ```
 Set the priority of installed RPDB rules. Hide.me CLI takes advantage of policy routing by installing a RPDB rule (one per
 IP protocol) in order to drive traffic to a chosen routing table and ensure IP leak protection.
 ```
-  -s networks
+  -s, --split-tunnel networks
     	comma separated list of networks (CIDRs) for which to bypass the VPN
 ```
 List of split-tunneled networks, i.e. the networks for which the traffic should not be tunneled over the VPN.
 ```
-  -t string
+  -t, --tokenFile filename
     	access token filename (default "accessToken.txt")
 ```
 Name of the file which contains an Access-Token.
 ```
-  -u username
+  -u, --username username
     	hide.me username
 ```
 Set hide.me username.
