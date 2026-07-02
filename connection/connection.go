@@ -154,7 +154,8 @@ func ( c *Connection ) Connect() {
 	var err error
 	defer func() {
 		if err != nil { c.Disconnect( true ) } else { c.StateNotify( c.state ) }																// Disconnect/rewind stack on error, notify otherwise
-		if c.connectNotify != nil { c.connectNotify( err ); c.connectNotify = nil }
+		c.Lock(); connectNotify := c.connectNotify; c.Unlock()
+		if connectNotify != nil { connectNotify( err ) }
 	}()
 	
 	c.Lock()

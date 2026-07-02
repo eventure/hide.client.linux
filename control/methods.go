@@ -95,6 +95,7 @@ func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) 
 	wg := sync.WaitGroup{}
 	wg.Add( 1 )
 	s.connection.SetConnectNotify( func( err error ) {
+		s.connection.SetConnectNotify(nil)
 		switch err {
 			case nil: writer.Write( Result{ Result: s.connection.State() }.Json() )
 			default:  writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: err.Error() } }.Json() )
