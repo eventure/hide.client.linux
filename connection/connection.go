@@ -343,18 +343,18 @@ func ( c *Connection ) ExternalIPs() ( err error ) {
 func ( c *Connection ) DPD() {
 	c.Lock()
 	currentRx, err := c.link.GetRx()
-	if err != nil { c.Unlock(); log.Println( "DPD: Failed:", err.Error() ); c.Disconnect( true ); return }											// There won't be any reconnect attempts so immediately notify
-	if currentRx == c.lastRx {
-		c.lastRx = 0
-		c.StateNotify( c.state.SetCode( DpdTimeout ) )
+	if err != nil { c.Unlock(); log.Println( "DPD: Failed:", err.Error() ); c.Disconnect( true ); return }											// There won't be any reconnect attempts when a link fails, so notify about the disconnect
+	if currentRx != c.lastRx {																														// RX counter changed, link is alive
+		c.lastRx = currentRx
+		c.dpdTimer.Reset( c.link.Config.DpdTimeout )
 		c.Unlock()
-		log.Println( "DPD: Timeout" )
-		c.StateNotify( &State{ Code: DpdTimeout, Timestamp: time.Now() } )																			// Notify about the DPD situation
-		c.Disconnect( false )																														// Connect will be scheduled and it will notify about the possible Disconnected state
-		c.ScheduleConnect( c.restClient.Config.ReconnectWait )
 		return
 	}
-	c.lastRx = currentRx
-	c.dpdTimer.Reset( c.link.Config.DpdTimeout )
+	c.lastRx = 0																																	// Link is not alive, reset the counter
+	c.StateNotify( c.state.SetCode( DpdTimeout ) )
 	c.Unlock()
+	log.Println( "DPD: Timeout" )
+	c.Disconnect( false )																															// Connect will be scheduled and it will notify about the possible Disconnected state
+	c.ScheduleConnect( c.restClient.Config.ReconnectWait )
+	return
 }
