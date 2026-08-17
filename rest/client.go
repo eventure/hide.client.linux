@@ -122,10 +122,8 @@ func ( c *Client ) Init() ( err error ) {
 		Timeout:	c.Config.RestTimeout,
 	}
 	
-	if len( c.Config.AccessToken ) > 0 {																											// Access-Token
-		if c.accessToken, err = base64.StdEncoding.DecodeString( c.Config.AccessToken ); err != nil { return }
-	}
-	if c.accessToken == nil && len( c.Config.AccessTokenPath ) > 0 {
+	if len( c.Config.AccessToken ) > 0 { if c.accessToken, err = base64.StdEncoding.DecodeString( c.Config.AccessToken ); err != nil { return } }	// Access-Token embedded in the configuration
+	if c.accessToken == nil && len( c.Config.AccessTokenPath ) > 0 {																				// Try to read the Access-Token from a file when there's no embedded one
 		if accessTokenBytes, err := os.ReadFile( c.Config.AccessTokenPath ); err == nil {
 			if c.accessToken, err = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ); err != nil { return err }
 		}

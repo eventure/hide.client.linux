@@ -1,6 +1,6 @@
 package rest
 
 type PortForward struct {
-	AccessToken		[]byte		`json:"accessToken,omitempty"`
+	AccessToken		[]byte		`json:"-"`
 	Enabled			bool		`json:"enabled,omitempty"`
 }
