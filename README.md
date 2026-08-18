@@ -16,13 +16,12 @@ features include:
 * DNS filter (SmartGuard)
 
 TODO:
-* Server lists and server chooser
 * Automatic server selection
 * Client certificate authentication/authorization
 
 ## Build
 
-You may clone this repository and run:
+You may clone this repository and run (Go 1.24 or newer is required):
 
 ```go build -o hide.me```
 
@@ -127,17 +126,20 @@ Once an Access-Token is in place it may be used for **connect** requests. Stale 
 
 hide.me CLI does not necessarily have to be invoked with a bunch of command line parameters. Instead, a YAML formatted
 configuration file may be used to specify all the options. To generate such a configuration file the **conf** command
-may be used.
+may be used. The **jsonconf** command (aliases: **jsonConf**, **json**) generates a JSON formatted configuration file
+instead. Both YAML and JSON configuration files are usable with the -c option.
 
 For DNS filtering (SmartGuard), a list of filtering categories can be obtained with **categories** command
 
 hide.me CLI can be run in **service** mode. When started in service mode, hide.me CLI just exposes a REST interface for
 control. The controller is responsible for configuring connections, activation of the kill-switch or any other operation.
-REST interface listen address is configurable through -caddr option.
+REST interface listen address is configurable through -caddr option. The REST interface is documented in
+[serviceScripts/api.md](serviceScripts/api.md), with example controller scripts available in the
+[serviceScripts/](serviceScripts/) directory.
 
 Note that there are a few options which are configurable only through the configuration file. Such options are:
-* Password - **DANGEROUS**, do not use this option unless you're aware of the security implications 
-* ConnectTimeout
+* AccessToken - the base64 encoded Access-Token, usable instead of the Access-Token file
+* PrivateKey - the base64 encoded WireGuard private key; when not set, a new one gets generated automatically
 * AccessTokenUpdateDelay
 * ReconnectWait
 ```
@@ -374,7 +376,8 @@ Activates a tracking filter
   --pg age
     	apply a parental guidance style age filter (12, 18)
 ```
-Activates a parental guidance style filter according to given age limit. Inappropriate content will be filtered out
+Activates a parental guidance style filter according to given age limit. Inappropriate content will be filtered out.
+Accepted values are 12, 18 and 21.
 ```
   --safeSearch
     	force safe search with search engines
@@ -384,7 +387,7 @@ Enforces SafeSearch mode with supported search engines (Google, Bing)
 ### Integration with systemd
 
 Hide.me CLI can be used standalone or as a systemd service. Using hide.me CLI as a systemd service allows you
-to take advantage of systemd's dependancy resolution, monitoring and various hardening features.<br>
+to take advantage of systemd's dependency resolution, monitoring and various hardening features.<br>
 The installer script links a template unit file hide.me@.service for you or you may manually link the template
 unit file by running:
 
