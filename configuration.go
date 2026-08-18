@@ -53,7 +53,7 @@ func NewConfiguration() *Configuration {										// Defaults
 				CA:						"CA.pem",								// command line option "--ca"
 				AccessTokenPath:		"accessToken.txt",						// command line option "-t"
 				Username:       		"",										// command line option "-u"
-				Password:				"",										// Only configurable through the config file
+				Password:				"",										// command line option "-P"
 				RestTimeout:	 		90 * time.Second,						// Command line option "--rest-timeout"
 				ReconnectWait:	 		30 * time.Second,						// Only configurable through the config file
 				AccessTokenUpdateDelay: 2 * time.Second,						// Only configurable through the config file
@@ -92,14 +92,14 @@ func NewConfiguration() *Configuration {										// Defaults
 		},
 		Control: &control.Config{
 			Address:				"@hide.me",									// command line option "-caddr"
-			LineLogBufferSize:		65535,										// command like option "-cllbs". Log buffer will remember 65536 log lines, when set to 0 there will be no buffering
+			LineLogBufferSize:		65535,										// command line option "-cllbs". Log buffer will remember 65536 log lines, when set to 0 there will be no buffering
 		},
 	}
 	return h
 }
 
 func ( c *Configuration ) Print() { if out, err := yaml.Marshal( c ); err != nil { log.Println( err ) } else { fmt.Print( string( out ) ) } }
-func ( c *Configuration ) PrintJson() { if out, err := json.MarshalIndent( c, "", "\t" ); err != nil { log.Println( err ) } else { log.Print( string( out ) ) } }
+func ( c *Configuration ) PrintJson() { if out, err := json.MarshalIndent( c, "", "\t" ); err != nil { log.Println( err ) } else { fmt.Print( string( out ) ) } }
 func ( c *Configuration ) SaveJson() error {
 	if len(configurationFileName) == 0 { log.Println( "Conf: [WARN] No configuration filename set" ); return nil }
 	out, err := json.MarshalIndent( c, "", "\t" )
@@ -117,7 +117,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.StringVarP		( &c.Rest.AccessTokenPath,			"tokenFile", "t",		c.Rest.AccessTokenPath, "access token `filename`" )
 	flag.StringVarP		( &c.Rest.Username,					"username", "u",		c.Rest.Username, "hide.me `username`" )
 	flag.StringVarP		( &c.Rest.Password,					"password", "P",		c.Rest.Password, "hide.me `password`" )
-	flag.BoolVar		( &c.Rest.PortForward.Enabled,		"pf",					c.Rest.PortForward.Enabled, "enable port-forwarding (uPnP and NAT-PMP)" )
+	flag.BoolVar		( &c.Rest.PortForward.Enabled,		"pf",					c.Rest.PortForward.Enabled, "enable dynamic port-forwarding technologies (uPnP and NAT-PMP)" )
 	flag.StringSliceVar	( &c.Plain.Servers,					"dns",					c.Plain.Servers, "comma separated list of DNS `servers`" )			// Resolver flags
 	flag.BoolVar		( &c.Rest.UseDoH,					"doh",					c.Rest.UseDoH, "Use DNS-over-HTTPs" )
 	flag.DurationVar	( &c.Rest.RestTimeout,				"rest-timeout",			c.Rest.RestTimeout, "REST call timeout" )
@@ -160,13 +160,14 @@ func ( c *Configuration ) Parse() ( err error ) {
 		_, _ = fmt.Fprint( os.Stderr, "command:\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  token - request an Access-Token (required for connect)\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  connect - connect to a vpn server\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  conf - generate a configuration file to be used with the -c option\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  conf - generate a YAML configuration file to be used with the -c option\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  jsonconf - generate a JSON configuration file to be used with the -c option\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  categories - fetch and dump filtering category list\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  service - run in remotely controlled service mode\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  updateDoh - update DNS-over-HTTPs server list\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  updateDoh - update DNS-over-HTTPs server list (resolvers.txt)\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  resolve - resolve host using DNS-over-HTTPs\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  lookup - resolve host using DNS\n" )
-		_, _ = fmt.Fprint( os.Stderr, "  list - fetch the server list\n" )
+		_, _ = fmt.Fprint( os.Stderr, "  list [free] - fetch the server list (use \"free\" to list only free servers)\n" )
 		_, _ = fmt.Fprint( os.Stderr, "host:\n" )
 		_, _ = fmt.Fprint( os.Stderr, "  fqdn, short name or an IP address of a hide.me server\n\n" )
 		_, _ = fmt.Fprint( os.Stderr, "options:\n" )
@@ -180,11 +181,12 @@ func ( c *Configuration ) Parse() ( err error ) {
 	if len(configurationFileName) > 0 {																												// Read in the configuration file
 		conf := []byte(nil)
 		if conf, err = os.ReadFile(configurationFileName); err != nil { if pathErr, ok := err.(*os.PathError); ok { return pathErr.Unwrap() }; return }
-		if conf[0] == '{' { err = json.Unmarshal(conf, c) } else { err = yaml.Unmarshal(conf, c) }														// JSON or YAML
+		if len(conf) == 0 { err = errors.New( "configuration file " + configurationFileName + " is empty" ); log.Println( "Conf: [ERR] Failed:", err.Error() ); return }
+		if conf[0] == '{' { err = json.Unmarshal(conf, c) } else { err = yaml.Unmarshal(conf, c) }													// JSON or YAML
 		if err != nil { return }
 	}
 
-	c.Rest.Mark = c.WireGuard.Mark																														// Fix
+	c.Rest.Mark = c.WireGuard.Mark
 	if *v4Only && *v6Only { err = errors.New( "IPv4 only and IPv6 only tunneling are mutually exclusive" ); log.Println( "Conf: [ERR] Failed:", err.Error() ); return }
 	if *v4Only { c.WireGuard.IPv6 = false }
 	if *v6Only { c.WireGuard.IPv4 = false }

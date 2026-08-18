@@ -338,23 +338,26 @@ func ( c *Client ) PrintServerList( ctx context.Context, kind string ) ( err err
 	fmt.Printf( "%-30s | %-20s | %s\n", "Location", "Hostname", "Specs" )
 	fmt.Printf( "%-30s | %-20s | %s\n", "--------", "--------", "-----" )
 	
-	var printServers func( locs []locations.Location, k string )
-	printServers = func( locs []locations.Location, k string ) {
+	var printServers func( locs []locations.Location )
+	printServers = func( locs []locations.Location ) {
 		for _, loc := range locs {
 			special := []string{}
+			free := false
 			for _, tag := range loc.Tags {
 				switch tag {
-					case "free":	special = append(special, "free" )
+					case "free":	special = append(special, "free" ); free = true
 					case "10g":		special = append(special, "10g" )
 				}
 			}
-			
-			hostname := strings.TrimSuffix( loc.Hostname, "-v4.hideservers.net" )
-			fmt.Printf( "%-30s | %-20s | %s\n", loc.DisplayName, hostname, strings.Join(special, ",") )
-			if len(loc.Children) > 0 { printServers( loc.Children, k ) }
+
+			if kind != "free" || free {
+				hostname := strings.TrimSuffix( loc.Hostname, "-v4.hideservers.net" )
+				fmt.Printf( "%-30s | %-20s | %s\n", loc.DisplayName, hostname, strings.Join(special, ",") )
+			}
+			if len(loc.Children) > 0 { printServers( loc.Children ) }
 		}
 	}
-	printServers( all, kind )
+	printServers( all )
 	return
 }
 
