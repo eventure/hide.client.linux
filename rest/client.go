@@ -27,7 +27,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-const userAgent = "HIDE.ME.LINUX.CLI-0.9.12"
+const userAgent = "HIDE.ME.LINUX.CLI-0.9.13"
 
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrBadPin = errors.New( "bad public key PIN" )

@@ -354,6 +354,6 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 
 func ( s *Server ) version(writer http.ResponseWriter, request *http.Request ) {
 	writer.Header().Add( "content-type", "application/json" )
-	log.Println( "vers: Sending version", "0.9.12" )
-	writer.Write( []byte( "0.9.12" ) )
+	log.Println( "vers: Sending version", "0.9.13" )
+	writer.Write( []byte( "0.9.13" ) )
 }
