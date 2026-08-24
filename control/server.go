@@ -57,6 +57,7 @@ func ( s *Server ) Init() ( err error ) {
 	mux.HandleFunc( "/configuration", s.configuration )
 	mux.HandleFunc( "/route", s.route )
 	mux.HandleFunc( "/connect", s.connect )
+	mux.HandleFunc( "/configureConnect", s.configureConnect )
 	mux.HandleFunc( "/disconnect", s.disconnect )
 	mux.HandleFunc( "/shutdown", s.shutdown )
 	mux.HandleFunc( "/destroy", s.destroy )

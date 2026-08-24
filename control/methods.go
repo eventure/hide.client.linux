@@ -42,7 +42,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
 		case "POST":
 			logBuffer := &bytes.Buffer{}
-			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 8192 ), logBuffer ) )
+			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 65536 ), logBuffer ) )
 			s.connection.Lock(); defer s.connection.Unlock()
 			if err := decoder.Decode( s.connection.Config ); err != nil {
 				log.Println( "Serv: [ERR] Configuration POST failed:", err )
@@ -99,6 +99,68 @@ func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) 
 		switch err {
 			case nil: writer.Write( Result{ Result: s.connection.State() }.Json() )
 			default:  writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: err.Error() } }.Json() )
+		}
+		wg.Done()
+	} )
+	s.connection.ScheduleConnect( 0 )
+	wg.Wait()
+}
+
+// configureConnect receives the configuration, checks whether the client has to get reinitialized and connects
+func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.Request ) {
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
+	
+	if request.Method != "POST" { log.Println( "CoCo: [ERR] configureConnect is POST" ); http.Error( writer, "not found", http.StatusNotFound ); return }
+	writer.Header().Add( "content-type", "application/json" )
+	
+	logBuffer := &bytes.Buffer{}
+	decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 65536 ), logBuffer ) )
+	newConfig := &connection.Config{}
+	if err := decoder.Decode( newConfig ); err != nil {
+		log.Println( "CoCo: [ERR] Configuration POST failed:", err )
+		writer.WriteHeader( http.StatusBadRequest )
+		writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
+		return
+	}
+	// log.Println( "CoCo: Configured from", request.RemoteAddr, "with", logBuffer.String() )
+
+	s.connection.Lock()
+	switch s.connection.Config.Compare( newConfig ) {																							// Let's check which kind of change did this configuration update introduce
+		case connection.CHANGED_REQUIRES_SHUTDOWN:																								// Configuration update requires a shutdown
+			log.Println( "CoCo: Configuration change requires shutdown" )
+			s.connection.Shutdown( false )																										// Skip state "clean" notification, a connect notification will follow soon enough
+			fallthrough
+		case connection.CHANGED:
+			log.Println( "CoCo: Configuration updated" )
+			s.connection.Config.Apply( newConfig )
+			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
+			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "CoCo: [ERR] Configuration save failed:", err ) }
+	}
+	s.connection.Unlock()
+	
+	switch code := s.connection.Code(); code {
+		case connection.Routed: break
+		case connection.Clean:
+			err := s.connection.Init()
+			if err == nil { break }
+			log.Println( "CoCo: [ERR] Connection initialization failed:", err )
+			writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: err.Error() } }.Json() )
+			return
+		default:
+			log.Println( "CoCo: [ERR] Connection in bad state: " + code )
+			writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: "bad state: " + code } }.Json() ); return
+	}
+	
+	wg := sync.WaitGroup{}
+	wg.Add( 1 )
+	s.connection.SetConnectNotify( func( err error ) {
+		s.connection.SetConnectNotify(nil)
+		switch err {
+			case nil: log.Println( "CoCo: Connected" ); writer.Write( Result{ Result: s.connection.State() }.Json() )
+			default:  log.Println( "CoCo: [ERR] Connect failed: ", err ); writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: err.Error() } }.Json() )
 		}
 		wg.Done()
 	} )

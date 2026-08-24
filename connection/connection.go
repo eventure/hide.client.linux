@@ -18,42 +18,6 @@ import (
 	"github.com/eventure/hide.client.linux/wireguard"
 )
 
-const (
-	Clean = "clean"
-	Routed = "routed"
-	Connecting = "connecting"
-	Connected = "connected"
-	TokenUpdate = "token update"
-	TokenUpdateDone = "token update done"
-	ConfigurationGet = "configuration get"
-	ConfigurationSet = "configuration set"
-	LogDump = "logs dumped"
-	Disconnecting = "disconnecting"
-	DpdTimeout = "dpd timeout"
-	DnsLookup = "dns lookup"
-	ExternalIps = "external ips"
-)
-
-type State struct {
-	Code			string		`json:"code"`
-	Timestamp		time.Time	`json:"timestamp"`
-	*rest.ConnectResponse		`json:",omitempty"`
-	Rx				int64		`json:"rx,omitempty"`
-	Tx				int64		`json:"tx,omitempty"`
-	Host			string		`json:"host,omitempty"`
-	ExternalIpv4	net.IP		`json:"external_ip,omitempty"`
-	ExternalIpv6	net.IP		`json:"external_ipv6,omitempty"`
-}
-
-func ( s *State ) SetCode( code string ) *State { s.Code, s.Timestamp = code, time.Now(); return s }
-
-type Config struct {
-	Rest			*rest.Config
-	WireGuard		*wireguard.Config
-	DoH				*doh.Config
-	Plain			*plain.Config
-}
-
 type Connection struct {
 	sync.Mutex
 	*Config
@@ -98,7 +62,7 @@ func ( c *Connection ) Init() ( err error ) {
 	c.link = wireguard.New( c.Config.WireGuard )
 	if err = c.link.Open(); err != nil { log.Println( "Init: [ERR] Wireguard open failed:", err ); return }										// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
 	c.initStack = append( c.initStack, c.link.Close )
-	defer c.state.SetCode( Routed )																												// Make sure to set state to "routed" so that the initStack may be unwound in Shutdown
+	defer c.state.SetCode( Routed ).ClearIps()																									// Make sure to set state to "routed" so that the initStack may be unwound in Shutdown
 
 	c.dohResolver = doh.New( c.Config.DoH )
 	c.dohResolver.Init()																														// Initialize DoHResolver
@@ -133,11 +97,12 @@ func ( c *Connection ) Init() ( err error ) {
 func ( c *Connection ) Shutdown( notify bool ) {
 	c.Lock()
 	switch c.state.Code {																														// Shutdown makes sense when Routed
+		case Clean: c.Unlock(); return
 		case Routed: break
 		default: log.Println( "Disc: [WARN] Called Shutdown while", c.state.Code ); c.Unlock(); return
 	}
 	for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]
-	c.state.SetCode( Clean )																													// Set state to Clean
+	c.state.SetCode( Clean ).ClearIps()																											// Set state to Clean
 	if notify { c.StateNotify( c.state ) }
 	c.Unlock()
 }
@@ -159,7 +124,7 @@ func ( c *Connection ) Connect() {
 	}()
 	
 	c.Lock()
-	c.StateNotify( c.state.SetCode( Connecting ) )																								// Set state to connecting
+	c.StateNotify( c.state.SetCode( Connecting ).ClearIps() )																					// Set state to connecting
 	
 	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
 	c.connectCancel = cancel
@@ -217,7 +182,7 @@ func ( c *Connection ) Connect() {
 	go c.AccessTokenRefresh( true )																												// Refresh the Access-Token when required
 	go c.Filter()																																// Apply possible filters
 	go c.PortForward()																															// Activate port-forwarding
-	c.state.SetCode( Connected )																												// Connection is running now so set state to connected
+	c.state.SetCode( Connected ).ClearIps()																										// Connection is running now so set state to connected
 }
 
 func ( c *Connection ) Disconnect( notify bool ) {
@@ -226,14 +191,14 @@ func ( c *Connection ) Disconnect( notify bool ) {
 		case Connected, Connecting, DpdTimeout: break
 		default: log.Println( "Disc: [WARN] Called Disconnect while", c.state.Code ); c.Unlock(); return
 	}
-	c.StateNotify( c.state.SetCode( Disconnecting ) )
+	c.StateNotify( c.state.SetCode( Disconnecting ).ClearIps() )
 	if c.connectTimer != nil { c.connectTimer.Stop(); c.connectTimer = nil }																	// Stop a possible scheduled connect
 	if c.connectCancel != nil { c.connectCancel(); c.connectCancel = nil  }																		// Stop a possible concurrent connect
 	for i := len(c.connectStack)-1; i >= 0; i-- { c.connectStack[i]() }
 	c.connectStack = c.connectStack[:0]
 	c.state.ConnectResponse = nil
 	c.state.Rx,c.state.Tx = 0, 0
-	c.state.SetCode( Routed )																													// Set state to routed
+	c.state.SetCode( Routed ).ClearIps()																										// Set state to routed
 	if notify { c.StateNotify( c.state ) }
 	c.Unlock()
 }
@@ -330,12 +295,12 @@ func ( c *Connection ) ExternalIPs() ( err error ) {
 		})
 		log.Println( "ExIP: Sending notifications" )
 		
-		c.Lock(); defer c.Unlock()
-		
-		oldStateCode := c.state.Code
-		c.state.Code = ExternalIps
+		c.Lock()
+		state := *c.state																															// ExternalIps is a notification, not a state
+		c.state.SetCode( ExternalIps )
 		c.StateNotify( c.state )																													// Send the new state
-		c.state.Code = oldStateCode
+		*c.state = state
+		c.Unlock()
 	}()
 	return
 }
@@ -351,7 +316,7 @@ func ( c *Connection ) DPD() {
 		return
 	}
 	c.lastRx = 0																																	// Link is not alive, reset the counter
-	c.StateNotify( c.state.SetCode( DpdTimeout ) )
+	c.StateNotify( c.state.SetCode( DpdTimeout ).ClearIps() )
 	c.Unlock()
 	log.Println( "DPD: Timeout" )
 	c.Disconnect( false )																															// Connect will be scheduled and it will notify about the possible Disconnected state
