@@ -46,6 +46,7 @@ func NewConfiguration() *Configuration {										// Defaults
 				IPv6:					true,									// command line options "-4" and "-6"
 			},
 			Rest: &rest.Config{
+				Version:				"0.9.14",								// Not configurable
 				APIVersion:				"v1.0.0",								// Not configurable
 				Host:           		"",										// command line option "-n"
 				Port:					432,									// command line option "-p"

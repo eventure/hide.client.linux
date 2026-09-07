@@ -27,8 +27,6 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-const userAgent = "HIDE.ME.LINUX.CLI-0.9.14"
-
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrBadPin = errors.New( "bad public key PIN" )
 var ErrMissingHost = errors.New( "missing host" )
@@ -38,6 +36,7 @@ type ErrHttpStatus int
 func ( e ErrHttpStatus ) Error() string { return "bad HTTP status " + strconv.Itoa( int( e ) ) }
 
 type Config struct {
+	Version					string			`yaml:"-"`										// REST client (and HIDE.ME CLI client) version
 	APIVersion				string			`yaml:"-"`										// Current API version is 1.0.0
 	Host					string			`yaml:"host,omitempty"`							// FQDN of the server
 	Port					int				`yaml:"port,omitempty"`							// Port to connect to when issuing REST requests
@@ -168,7 +167,7 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 	if err != nil { return }
 	request, err := http.NewRequestWithContext( ctx, "POST", url, bytes.NewReader( body ) )
 	if err != nil { return }
-	request.Header.Set( "user-agent", userAgent )
+	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-" + c.Config.Version )
 	request.Header.Add( "content-type", "application/json" )
 	response, err := c.client.Do( request )
 	if err != nil { return }
@@ -181,7 +180,7 @@ func ( c *Client ) postJson( ctx context.Context, url string, object interface{}
 func ( c *Client ) get( ctx context.Context, url string ) ( body []byte, headers http.Header, err error ) {
 	request, err := http.NewRequestWithContext( ctx, "GET", url, nil )
 	if err != nil { return }
-	request.Header.Set( "user-agent", userAgent )
+	request.Header.Set( "user-agent", "HIDE.ME.LINUX.CLI-" + c.Config.Version )
 	response, err := c.client.Do( request )
 	if err != nil { return }
 	defer response.Body.Close()
