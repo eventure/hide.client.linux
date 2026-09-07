@@ -58,6 +58,7 @@ func ( c *Connection ) StateNotifyFnDel( stateNotifyFn *func( state *State ) ) {
 func ( c *Connection ) Init() ( err error ) {
 	defer func() { if err != nil { log.Println( "Init [ERR]: Failed with", err ); c.Shutdown(true) } else { log.Println( "Init: Done" ) } } ()	// When something fails, undo changes
 	c.Lock(); defer c.Unlock()
+	log.Println( "Init: Hide.me CLI " + c.Rest.Version + " initializing" )
 
 	c.link = wireguard.New( c.Config.WireGuard )
 	if err = c.link.Open(); err != nil { log.Println( "Init: [ERR] Wireguard open failed:", err ); return }										// Open or create a wireguard interface, auto-generate a private key when no private key has been configured
