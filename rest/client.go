@@ -27,7 +27,7 @@ import (
 	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 )
 
-const userAgent = "HIDE.ME.LINUX.CLI-0.9.13"
+const userAgent = "HIDE.ME.LINUX.CLI-0.9.14"
 
 var ErrAppUpdateRequired = errors.New( "application update required" )
 var ErrBadPin = errors.New( "bad public key PIN" )
@@ -129,7 +129,6 @@ func ( c *Client ) Init() ( err error ) {
 		}
 	}
 	c.Config.Filter.AccessToken = c.accessToken
-	c.Config.PortForward.AccessToken = c.accessToken
 	
 	c.authorizedPins = map[string]string{																											// Certificate names and pins
 		"Hide.Me Root CA": "AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",
@@ -282,7 +281,8 @@ func ( c *Client ) ApplyFilter( ctx context.Context ) ( err error ) {
 }
 
 func ( c *Client ) EnablePortForwarding( ctx context.Context ) ( err error ) {
-	response, err := c.postJson( ctx, "https://10.255.255.250:4321/upnp", c.Config.PortForward )
+	req := map[string]any{ "enabled": true, "accessToken": c.accessToken }
+	response, err := c.postJson( ctx, "https://10.255.255.250:4321/upnp", req )
 	if string(response) == "false" { err = errors.New( "port-forwarding failed" ) }
 	return
 }
