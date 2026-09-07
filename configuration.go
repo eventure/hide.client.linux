@@ -46,7 +46,7 @@ func NewConfiguration() *Configuration {										// Defaults
 				IPv6:					true,									// command line options "-4" and "-6"
 			},
 			Rest: &rest.Config{
-				Version:				"0.9.14",								// Not configurable
+				Version:				"0.9.15",								// Not configurable
 				APIVersion:				"v1.0.0",								// Not configurable
 				Host:           		"",										// command line option "-n"
 				Port:					432,									// command line option "-p"
@@ -156,6 +156,8 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.StringVar		( &c.Control.Key,					"ckey",					c.Control.Key, "Control interface `key` file" )
 	flag.IntVar			( &c.Control.LineLogBufferSize,		"cllbs",				c.Control.LineLogBufferSize, "Control interface line log buffer `size`" )
 
+	versionRequest := flag.BoolP( "version", "v", false, "Show version information" )
+
 	flag.Usage = func() {
 		_, _ = fmt.Fprint( os.Stderr, "Usage:\n  ", os.Args[0], " [options...] <command> [host]\n\n" )
 		_, _ = fmt.Fprint( os.Stderr, "command:\n" )
@@ -179,6 +181,8 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.CommandLine.SortFlags = false
 	flag.Parse()
 
+	if *versionRequest { fmt.Fprint( os.Stderr, "hide.me.linux.cli ", c.Rest.Version, "\n" )	}
+	
 	if len(configurationFileName) > 0 {																												// Read in the configuration file
 		conf := []byte(nil)
 		if conf, err = os.ReadFile(configurationFileName); err != nil { if pathErr, ok := err.(*os.PathError); ok { return pathErr.Unwrap() }; return }

@@ -130,6 +130,7 @@ func main() {
 				default:		serverList( conf, "" )
 			}
 			return
+		case "": return
 		default: log.Println( "Main: Unsupported command", flag.Arg(0) ); flag.Usage(); return
 	}
 	
