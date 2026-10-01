@@ -107,6 +107,7 @@ func ( c *Client ) Init() ( err error ) {
 			NextProtos:				[]string{ "h2" },
 			ServerName:				"hideservers.net",
 			MinVersion:				tls.VersionTLS13,
+			CurvePreferences:		[]tls.CurveID{ tls.X25519MLKEM768 },
 			VerifyPeerCertificate:	c.Pins,
 		},
 	}
@@ -132,8 +133,6 @@ func ( c *Client ) Init() ( err error ) {
 	c.authorizedPins = map[string]string{																											// Certificate names and pins
 		"Hide.Me Root CA": "AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",
 		"Hide.Me Server CA #1": "CsEyDelMHMPh9qLGgeQn8sJwdUwvc+fCMhOU9Ne5PbU=",
-		"DigiCert Global Root CA": "r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E=",
-		"DigiCert TLS RSA SHA256 2020 CA1": "RQeZkB42znUfsDIIFWIRiYEcKl7nHwNFwWCrnMMJbVc=",
 	}
 	return
 }

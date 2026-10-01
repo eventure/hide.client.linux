@@ -23,7 +23,7 @@ url='https:/'${HIDE_ME_SERVER}'.hideservers.net:432/v1.0.0/accessToken'
 
 data="{"
 data=${data}'"domain":"hide.me",'
-data=${data}'"host":"",'
+data=${data}'"host":"'${HIDE_ME_SERVER}'",'
 data=${data}'"username":"'${HIDE_ME_USERNAME}'",'
 data=${data}'"password":"'${HIDE_ME_PASSWORD}'"'
 data=${data}"}"
