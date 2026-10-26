@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
+	"strings"
 	"time"
 	
 	"github.com/eventure/hide.client.linux/connection"
@@ -60,6 +62,7 @@ func NewConfiguration() *Configuration {										// Defaults
 				AccessTokenUpdateDelay: 2 * time.Second,						// Only configurable through the config file
 				Mark:					0,										// command line option "-m"
 				UseDoH:					true,									// command line option "--doh"
+				NextHop:				"",										// command line option "--multiHop"
 			},
 			DoH: &doh.Config {
 				Servers: []string{
@@ -121,6 +124,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	flag.BoolVar		( &c.Rest.PortForward.Enabled,		"pf",					c.Rest.PortForward.Enabled, "enable dynamic port-forwarding technologies (uPnP and NAT-PMP)" )
 	flag.StringSliceVar	( &c.Plain.Servers,					"dns",					c.Plain.Servers, "comma separated list of DNS `servers`" )			// Resolver flags
 	flag.BoolVar		( &c.Rest.UseDoH,					"doh",					c.Rest.UseDoH, "Use DNS-over-HTTPs" )
+	flag.StringVarP		( &c.Rest.NextHop,					"multiHop", "M",		c.Rest.NextHop, "next hop server name (max 32 characters)"	)
 	flag.DurationVar	( &c.Rest.RestTimeout,				"rest-timeout",			c.Rest.RestTimeout, "REST call timeout" )
 
 	flag.BoolVar		( &c.Rest.Filter.ForceDns,			"forceDns",				c.Rest.Filter.ForceDns, "alway use hide.me DNS servers" )			// Filtering flags
@@ -195,5 +199,12 @@ func ( c *Configuration ) Parse() ( err error ) {
 	if *v4Only && *v6Only { err = errors.New( "IPv4 only and IPv6 only tunneling are mutually exclusive" ); log.Println( "Conf: [ERR] Failed:", err.Error() ); return }
 	if *v4Only { c.WireGuard.IPv6 = false }
 	if *v6Only { c.WireGuard.IPv4 = false }
+	
+	if len( c.Rest.NextHop ) > 0 {
+		c.Rest.NextHop = strings.TrimSuffix( c.Rest.NextHop, ".hideservers.net" )
+		if len( c.Rest.NextHop ) > 32 { err = errors.New( "exit server name too long" ); return }
+		word := regexp.MustCompile( `^([[:word:]]|-)+$` )
+		if !word.MatchString( c.Rest.NextHop ) { err = errors.New( "invalid exit server name" ); return }
+	}
 	return
 }

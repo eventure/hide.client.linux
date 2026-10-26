@@ -53,6 +53,7 @@ type Config struct {
 	Filter					Filter			`yaml:"filter,omitempty"`						// Filtering settings
 	PortForward				PortForward		`yaml:"portForward,omitempty"`					// Enable port-forwarding (uPnP and NAT-PMP)
 	UseDoH					bool			`yaml:"useDoH,omitempty"`						// Use DNS-over-HTTPs resolver
+	NextHop					string			`yaml:"nextHop,omitempty"`						// multiHop target ( shortname like nl, de, se ... )
 }
 
 // SetHost adds .hideservers.net suffix for short names ( nl becomes nl.hideservers.net ) or removes .hide.me and replaces it with .hideservers.net.
@@ -128,7 +129,6 @@ func ( c *Client ) Init() ( err error ) {
 			if c.accessToken, err = base64.StdEncoding.DecodeString( string( accessTokenBytes ) ); err != nil { return err }
 		}
 	}
-	c.Config.Filter.AccessToken = c.accessToken
 	
 	c.authorizedPins = map[string]string{																											// Certificate names and pins
 		"Hide.Me Root CA": "AdKh8rXi68jeqv5kEzF4wJ9M2R89gFuMILRQ1uwADQI=",
@@ -271,17 +271,51 @@ func ( c *Client ) GetAccessToken( ctx context.Context ) ( accessToken string, e
 	return
 }
 
-func ( c *Client ) ApplyFilter( ctx context.Context ) ( err error ) {
-	if err = c.Config.Filter.Check(); err != nil { return }
+func ( c *Client ) ApplyFilter() {
+	if c.Config.Filter.Empty() { return }
+	ctx, cancel := context.WithTimeout( context.Background(), c.Config.RestTimeout )
+	defer cancel()
+	
+	if err := c.Config.Filter.Check(); err != nil { log.Println( "Fltr: [ERR] Bad filters:", err ); return }
+	c.Config.Filter.AccessToken = c.accessToken; defer func() { c.Config.Filter.AccessToken = nil }()
 	response, err := c.postJson( ctx, "https://10.255.255.250:4321/filter", c.Config.Filter )
-	if string(response) == "false" { err = errors.New( "filter failed" ) }
-	return
+	if err != nil { log.Println( "Fltr: [ERR] Setting filters failed:", err ); return }
+	
+	switch string(response) {
+		case "false": log.Println( "Fltr: Filters (", c.Config.Filter.String(), ") have not been applied:" )
+		case "true":  log.Println( "Fltr: Filters (", c.Config.Filter.String(),") applied" )
+	}
 }
 
-func ( c *Client ) EnablePortForwarding( ctx context.Context ) ( err error ) {
+func ( c *Client ) EnablePortForwarding() {
+	if !c.Config.PortForward.Enabled { return }
+	if len( c.Config.NextHop ) > 0 { log.Println( "PFwd: [WARN] Port-Forwarding and MultiHop are mutually exclusive, skipping" ); return }
+	ctx, cancel := context.WithTimeout( context.Background(), c.Config.RestTimeout )
+	defer cancel()
+	
 	req := map[string]any{ "enabled": true, "accessToken": c.accessToken }
 	response, err := c.postJson( ctx, "https://10.255.255.250:4321/upnp", req )
-	if string(response) == "false" { err = errors.New( "port-forwarding failed" ) }
+	if err != nil { log.Println( "PFwd: [ERR] Port-Forwarding failed:", err ); return }
+	
+	switch string(response) {
+		case "false": log.Println( "PFwd: Port-Forwarding has not been enabled" )
+		case "true":  log.Println( "PFwd: Port-Forwarding enabled" )
+	}
+}
+
+func ( c *Client ) MultiHop() {
+	if len( c.Config.NextHop ) == 0 { return }
+	ctx, cancel := context.WithTimeout( context.Background(), c.Config.RestTimeout )
+	defer cancel()
+	
+	req := map[string]any{ "gateway": c.Config.NextHop + ".hideservers.net", "accessToken": c.accessToken }
+	response, err := c.postJson( ctx, "https://10.255.255.250:4321/redirect", req )
+	if err != nil { log.Println( "MHop: [ERR] MultiHop to", c.Config.NextHop, "failed:", err ); return }
+	
+	switch string(response) {
+		case "false": log.Println( "MHop: MultiHop to", c.Config.NextHop, "has not been enabled" )
+		case "true":  log.Println( "MHop: MultiHop to", c.Config.NextHop, "enabled" )
+	}
 	return
 }
 

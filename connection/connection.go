@@ -180,9 +180,12 @@ func ( c *Connection ) Connect() {
 		log.Println( "Conn: DPD started" )
 	}
 	
-	go c.AccessTokenRefresh( true )																												// Refresh the Access-Token when required
-	go c.Filter()																																// Apply possible filters
-	go c.PortForward()																															// Activate port-forwarding
+	go func() {
+		c.restClient.MultiHop()																													// Request multihop
+		c.restClient.EnablePortForwarding()																										// Activate port-forwarding
+		c.restClient.ApplyFilter()																												// Apply possible filters
+		c.AccessTokenRefresh( true )																											// Refresh the Access-Token when required
+	}()
 	c.state.SetCode( Connected ).ClearIps()																										// Connection is running now so set state to connected
 }
 
@@ -221,13 +224,13 @@ func ( c *Connection ) AccessTokenRefresh( notify bool ) {
 func ( c *Connection ) AccessTokenFetch( notify bool ) ( accessToken string, err error ) {
 	c.Lock(); defer c.Unlock()
 	
-	newRestConfig := *c.Config.Rest																												// Duplicate config since ExternalIps changes Port, CA and Host fields
-	client := rest.New( &newRestConfig )																										// Create a REST client (must be a new one since externalIps changes client's configuration)
+	newRestConfig := *c.Config.Rest																												// Duplicate config since AccessTokenFetch changes Port, CA and Host fields
+	client := rest.New( &newRestConfig )																										// Create a REST client (must be a new one since AccessTokenFetch changes client's configuration)
 	dohResolver := doh.New( c.Config.DoH )																										// Create a DoH resolver
 	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }				// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
 	
-	plainResolver := plain.New( c.Config.Plain )																								// Create a Plain resolver (fallback)
-	if err = plainResolver.Init(); err != nil { log.Println( "AccessTokenFetch: [ERR] Plain resolver failed:", err ); return }					// Initialize Plain resolver
+	plainResolver := plain.New( c.Config.Plain )																								// Create a Plain resolver (fallback when disconnected. main when connected)
+	if err = plainResolver.Init(); err != nil { log.Println( "AcFe: [ERR] Plain resolver failed:", err ); return }								// Initialize Plain resolver
 	client.SetPlainResolver( plainResolver )																									// Attach the Plain resolver
 	
 	if c.state.Code == Routed { dohResolver.SetRouteOps( c.link ); plainResolver.SetRouteOps( c.link ) }										// DoH or Plain resolution throw routes required when leak protection mode active in routed state
@@ -244,26 +247,6 @@ func ( c *Connection ) AccessTokenFetch( notify bool ) ( accessToken string, err
 	return
 }
 
-func ( c *Connection ) Filter() {
-	if c.restClient.Config.Filter.Empty() { return }
-	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
-	defer cancel()
-	switch err := c.restClient.ApplyFilter( ctx ); err {
-		case nil: log.Println( "Fltr: Filters (", c.restClient.Config.Filter.String(),") applied" )
-		default:  log.Println( "Fltr: Filters (", c.restClient.Config.Filter.String(), ") have not been applied:", err )
-	}
-}
-
-func ( c *Connection ) PortForward() {
-	if !c.restClient.Config.PortForward.Enabled { return }
-	ctx, cancel := context.WithTimeout( context.Background(), c.restClient.Config.RestTimeout )
-	defer cancel()
-	switch err := c.restClient.EnablePortForwarding( ctx ); err {
-		case nil: log.Println( "PFwd: Port-Forwarding enabled" )
-		default:  log.Println( "PFwd: Port-Forwarding has not been enabled:", err )
-	}
-}
-
 func ( c *Connection ) ExternalIPs() ( err error ) {
 	c.Lock(); defer c.Unlock()
 	
@@ -272,7 +255,7 @@ func ( c *Connection ) ExternalIPs() ( err error ) {
 	dohResolver := doh.New( c.Config.DoH )																											// Create a DoH resolver
 	if c.state.Code == Connected { newRestConfig.UseDoH = false } else { dohResolver.Init(); client.SetDohResolver( dohResolver ) }					// Disable DoH when connected (tunnel secures DNS), initialize and attach the DoHResolver otherwise
 
-	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback)
+	plainResolver := plain.New( c.Config.Plain )																									// Create a Plain resolver (fallback when disconnected. main when connected)
 	if err = plainResolver.Init(); err != nil { log.Println( "ExIP: [ERR] Plain resolver failed:", err ); return }									// Initialize the Plain resolver
 	client.SetPlainResolver( plainResolver )																										// Attach the Plain resolver
 
