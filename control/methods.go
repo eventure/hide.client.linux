@@ -125,21 +125,19 @@ func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.R
 		writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
 		return
 	}
-	// log.Println( "CoCo: Configured from", request.RemoteAddr, "with", logBuffer.String() )
 
 	s.connection.Lock()
-	switch s.connection.Config.Compare( newConfig ) {																							// Let's check which kind of change did this configuration update introduce
-		case connection.CHANGED_REQUIRES_SHUTDOWN:																								// Configuration update requires a shutdown
+	if changeType := s.connection.Config.Compare( newConfig ); changeType > 0 {																	// Let's check which kind of change did this configuration update introduce
+		log.Println( "CoCo: Configuration updated" )
+		s.connection.Config.Apply( newConfig )
+		s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
+		if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "CoCo: [ERR] Configuration save failed:", err ) }
+		if changeType > connection.CHANGED {																									// Configuration update requires a shutdown
+			s.connection.Unlock()
 			log.Println( "CoCo: Configuration change requires shutdown" )
 			s.connection.Shutdown( false )																										// Skip state "clean" notification, a connect notification will follow soon enough
-			fallthrough
-		case connection.CHANGED:
-			log.Println( "CoCo: Configuration updated" )
-			s.connection.Config.Apply( newConfig )
-			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
-			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "CoCo: [ERR] Configuration save failed:", err ) }
-	}
-	s.connection.Unlock()
+		}
+	} else { s.connection.Unlock() }
 	
 	switch code := s.connection.Code(); code {
 		case connection.Routed: break

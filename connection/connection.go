@@ -100,19 +100,20 @@ func ( c *Connection ) Shutdown( notify bool ) {
 	switch c.state.Code {																														// Shutdown makes sense when Routed
 		case Clean: c.Unlock(); return
 		case Routed: break
-		default: log.Println( "Disc: [WARN] Called Shutdown while", c.state.Code ); c.Unlock(); return
+		default: log.Println( "Shut: [WARN] Called Shutdown while", c.state.Code ); c.Unlock(); return
 	}
 	for i := len(c.initStack)-1; i >= 0; i-- { c.initStack[i]() }; c.initStack = c.initStack[:0]
 	c.state.SetCode( Clean ).ClearIps()																											// Set state to Clean
 	if notify { c.StateNotify( c.state ) }
 	c.Unlock()
+	log.Println( "Shut: Shutdown done" )
 }
 
 func ( c *Connection ) ScheduleConnect( in time.Duration ) {
 	c.Lock()
 	if c.connectTimer == nil { c.connectTimer = time.AfterFunc( in, c.Connect ) } else { c.connectTimer.Reset( in ) }
 	c.state.Host = c.Config.Rest.Host																											// Set the hostname to Host
-	log.Println( "Conn: Connecting in", in )
+	log.Println( "ShCo: Connecting in", in )
 	c.Unlock()
 }
 
