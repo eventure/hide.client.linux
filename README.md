@@ -215,9 +215,18 @@ During TLS negotiation the VPN server's certificate needs to be verified. This o
 an alternate CA certificate bundle file.
 ```
   --caddr address
-    	Control interface listen address (default "@hide.me")
+    	Control interface listen address (default "/run/hide.me/hide.me.sock")
 ```
-Set the service mode control interface (API) listen address. hide.me CLI, by default, listens on an abstract UNIX socket hide.me.
+Set the service mode control interface (API) listen address. hide.me CLI, by default, listens on the UNIX socket
+/run/hide.me/hide.me.sock, owned by the --cgroup group with mode 0660. An address starting with @ (e.g. @hide.me) selects
+an abstract UNIX socket, an address without / or @ a TCP socket. UNIX socket callers must be root, same user or members of the
+--cgroup group, TCP callers are not checked.
+```
+  --cgroup group
+    	Control interface unix socket access group (default "hideme")
+```
+Set the group whose members may use the service mode control interface (API) over a UNIX socket. When the group does not
+exist, a warning is logged and the socket is accessible to the same user the service is running as and to the root user.
 ```
   --ccert certificate
     	Control interface certificate file

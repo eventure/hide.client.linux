@@ -95,7 +95,8 @@ func NewConfiguration() *Configuration {										// Defaults
 			},
 		},
 		Control: &control.Config{
-			Address:				"@hide.me",									// command line option "-caddr"
+			Address:				"/run/hide.me/hide.me.sock",				// command line option "-caddr"
+			Group:					"",											// command line option "-cgroup", setting that option turns on access control
 			LineLogBufferSize:		65535,										// command line option "-cllbs". Log buffer will remember 65536 log lines, when set to 0 there will be no buffering
 		},
 	}
@@ -156,6 +157,7 @@ func ( c *Configuration ) Parse() ( err error ) {
 	v6Only := flag.BoolP(									"ipv6-only", "6",		false, "Use IPv6 tunneling only" )
 
 	flag.StringVar		( &c.Control.Address,				"caddr", 				c.Control.Address, "Control interface listen `address`" )			// Control related flags
+	flag.StringVar		( &c.Control.Group,					"cgroup",				c.Control.Group, "Control interface unix socket access `group`" )
 	flag.StringVar		( &c.Control.Certificate,			"ccert",				c.Control.Certificate, "Control interface `certificate` file" )
 	flag.StringVar		( &c.Control.Key,					"ckey",					c.Control.Key, "Control interface `key` file" )
 	flag.IntVar			( &c.Control.LineLogBufferSize,		"cllbs",				c.Control.LineLogBufferSize, "Control interface line log buffer `size`" )

@@ -1,2 +1,2 @@
 #!/bin/bash
-curl -s --abstract-unix-socket hide.me http://localhost/route
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/route

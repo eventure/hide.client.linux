@@ -12,10 +12,24 @@ To start the `hide.me` service, run the following command:
 ```
 The expected output should be:
 ```
-Init: Starting HTTP server on @hide.me
+Init: Starting HTTP server on /run/hide.me/hide.me.sock
 ```
-If not configured otherwise, hide.me client listens on a UNIX socket in the abstract namespace for HTTP requests. The socket is named
-@hide.me.
+If not configured otherwise, hide.me client listens on the UNIX socket /run/hide.me/hide.me.sock for HTTP requests. The
+socket's parent directory gets created when missing and a stale socket file gets removed. The socket is owned by the group
+set with the --cgroup option (defaults to empty) and has mode 0660. When that group does not exist, a warning is logged and
+the socket is accessible to its owner only (mode 0600).
+
+Every UNIX socket connection, filesystem or abstract, is checked with SO_PEERCRED. A caller is allowed when it runs as root,
+the same user as we do, or its process is a member (primary or supplementary) of the --cgroup group. Other callers get:
+```
+HTTP/1.1 403 Forbidden
+
+{"error":{"code":"forbidden","message":"not allowed"}}
+```
+and the service logs `Pchk: [ERR] Peer uid <uid> pid <pid> gids <gids> not allowed`. TCP listeners are not checked.
+
+To use the abstract UNIX socket @hide.me instead, as earlier versions did, run `./hide.me --caddr @hide.me service` and
+pass `--abstract-unix-socket hide.me` to curl instead of `--unix-socket /run/hide.me/hide.me.sock`.
 
 ### Changing the Listener Address
 You can modify the listener's address using the --caddr option. For example, to bind hide.me CLI to a TCP port:
@@ -55,7 +69,7 @@ Configuring the client is the first step before making any API requests. The def
 **`Hostname`** attribute needing to be set.
 Access-Token may be set directly through the AccessToken attribute or may be stored in a file at AccessTokenPath.
 ```
-curl -s -X GET --abstract-unix-socket hide.me http://localhost/configuration
+curl -s -X GET --unix-socket /run/hide.me/hide.me.sock http://localhost/configuration
 ```
 fetches the current configuration:
 ```
@@ -99,7 +113,7 @@ must be set.<br>
 Once you've completed the configuration, send it to the service:
 
 ```
-curl -s -X POST --abstract-unix-socket hide.me http://localhost/configuration --data @configuration.json
+curl -s -X POST --unix-socket /run/hide.me/hide.me.sock http://localhost/configuration --data @configuration.json
 ```
 Only the changed attributes need to be sent via a `POST` request. For example, if you're just connecting to `hide.me`, it's enough
 to update the **`Host`** attribute. The configuration JSON can be as simple as:
@@ -134,7 +148,7 @@ To fetch an Access Token, the client must be configured with the following attri
 
 Once these attributes are set, you can retrieve the Access Token by issuing the following command:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/token
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/token
 ```
 A successful response will return an object which contains the issued token:
 ```
@@ -146,7 +160,7 @@ The issued token will be stored in the runtime configuration and the filename sp
 When started in service mode hide.me CLI won't create a WireGuard interface, won't apply any settings or routing. It has to be instructed
 to do so by invoking the route method:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/route
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/route
 ```
 This will bring up a wireguard interface, enable or disable configured features, especially the kill-switch, and get ready for
 connection establishment. If you forget to call route, the connect method will automatically invoke it. Routing is a prerequisite
@@ -158,7 +172,7 @@ for connection establishments. A successful route request returns:
 ### Destruction
 Destroy is an inverse operation of routing:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/destroy
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/destroy
 ```
 Destroy will clean up the system and remove the wireguard interface. Destroy may be called even while connected. In that case, destroy will
 disconnect and clean up. A successful destroy request returns:
@@ -172,7 +186,7 @@ modify without going through the destroy/route cycle.
 ### Connect
 Connection establishment is as easy as issuing:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/connect
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/connect
 ```
 A successful connect response might look like the following:
 ```
@@ -219,7 +233,7 @@ occur during reconnection attempts, the CLI will automatically reuse the remembe
 ### Disconnect
 Disconnect is just as easy as connect:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/disconnect
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/disconnect
 ```
 Disconnect should always succeed and would respond with:
 ```
@@ -230,7 +244,7 @@ Disconnect puts the client back into the "routed" state.
 ### State
 State method will dump the client's current status. For example, when connected one could invoke:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/state
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/state
 ```
 The result will contain all the information about the client state:
 ```
@@ -268,11 +282,11 @@ State response is almost identical to connect response. However, state provides 
 ### Watch
 Some integrations might require an event stream. By invoking the watch method such an event stream is made available to the consumer.
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/watch
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/watch
 ```
 
 ### Log
 Hide.me CLI keeps a copy of its logs in a circular ring-buffer. To fetch a copy of those logs issue:
 ```
-curl -s --abstract-unix-socket hide.me http://localhost/log
+curl -s --unix-socket /run/hide.me/hide.me.sock http://localhost/log
 ``` 
