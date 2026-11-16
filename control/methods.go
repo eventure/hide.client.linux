@@ -1,7 +1,6 @@
 package control
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -41,8 +40,9 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
 		case "POST":
-			logBuffer := &bytes.Buffer{}
-			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 65536 ), logBuffer ) )
+			/* logBuffer := &bytes.Buffer{}
+			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 65536 ), logBuffer ) )*/
+			decoder := json.NewDecoder( io.LimitReader( request.Body, 65536 ) )
 			s.connection.Lock(); defer s.connection.Unlock()
 			if err := decoder.Decode( s.connection.Config ); err != nil {
 				log.Println( "Serv: [ERR] Configuration POST failed:", err )
@@ -50,7 +50,8 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 				writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
 				return
 			}
-			log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
+			// log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
+			log.Println( "Serv: Configured from", request.RemoteAddr )
 			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "Serv: [ERR] Configuration save failed:", err ) }
 			writer.WriteHeader( http.StatusOK )																											// Return 200 OK even though SaveJson might have failed. After all, configuration was updated
 			writer.Write( Result{ Result: true }.Json() )
@@ -116,8 +117,7 @@ func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.R
 	if request.Method != "POST" { log.Println( "CoCo: [ERR] configureConnect is POST" ); http.Error( writer, "not found", http.StatusNotFound ); return }
 	writer.Header().Add( "content-type", "application/json" )
 	
-	logBuffer := &bytes.Buffer{}
-	decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 65536 ), logBuffer ) )
+	decoder := json.NewDecoder( io.LimitReader( request.Body, 65536 ) )
 	newConfig := &connection.Config{}
 	if err := decoder.Decode( newConfig ); err != nil {
 		log.Println( "CoCo: [ERR] Configuration POST failed:", err )
