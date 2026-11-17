@@ -24,9 +24,9 @@ type RouteOps interface {
 }
 
 type Config struct {
-	Servers		[]string	`json:"servers,omitempty"`		// DNS stamps
-	UpdateURLs	[]string	`json:"updateURLs,omitempty"`	// Update URLs
-	Filename	string		`json:"filename,omitempty"`		// Storage file
+	Servers		[]string	`yaml:"servers,omitempty" json:"servers,omitempty"`			// DNS stamps
+	UpdateURLs	[]string	`yaml:"updateURLs,omitempty" json:"updateURLs,omitempty"`	// Update URLs
+	Filename	string		`yaml:"filename,omitempty" json:"filename,omitempty"`		// Storage file
 }
 
 type Resolver struct {

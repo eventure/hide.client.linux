@@ -18,7 +18,7 @@ type RouteOps interface {
 }
 
 type Config struct {
-	Servers		[]string		`yaml:"servers,omitempty"`										// DNS server IP addresses
+	Servers		[]string		`yaml:"servers,omitempty" json:"servers,omitempty"`				// DNS server IP addresses
 }
 
 type Resolver struct {

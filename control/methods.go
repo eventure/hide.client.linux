@@ -36,6 +36,9 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			writer.WriteHeader( http.StatusOK )
 			encoder := json.NewEncoder( writer )
 			s.connection.Lock(); defer s.connection.Unlock()
+			accessToken, username, password := s.connection.Config.Rest.AccessToken, s.connection.Config.Rest.Username, s.connection.Config.Rest.Password
+			s.connection.Config.Rest.AccessToken, s.connection.Config.Rest.Username, s.connection.Config.Rest.Password = "", "", ""						// Clear sensitive data
+			defer func() { s.connection.Config.Rest.AccessToken, s.connection.Config.Rest.Username, s.connection.Config.Rest.Password = accessToken, username, password }()
 			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configuration GET failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
