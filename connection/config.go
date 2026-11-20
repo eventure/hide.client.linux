@@ -36,8 +36,6 @@ func ( c *Config ) Compare( d *Config ) ( changeType int ) {
 	if dRest.Domain != cRest.Domain { changeType |= CHANGED }
 	if dRest.AccessTokenPath != cRest.AccessTokenPath { changeType |= CHANGED }
 	if dRest.AccessToken != cRest.AccessToken { changeType |= CHANGED }
-	if dRest.Username != cRest.Username { changeType |= CHANGED }
-	if dRest.Password != cRest.Password { changeType |= CHANGED }
 	if dRest.RestTimeout != cRest.RestTimeout { changeType |= CHANGED }
 	if dRest.ReconnectWait != cRest.ReconnectWait { changeType |= CHANGED }
 	if dRest.AccessTokenUpdateDelay != cRest.AccessTokenUpdateDelay { changeType |= CHANGED }
@@ -71,8 +69,12 @@ func ( c *Config ) Compare( d *Config ) ( changeType int ) {
 
 // Apply applies the configuration in *d. c.Rest, c.WireGuard, c.DoH and c.Plain are held by their corresponding structs
 func ( c *Config ) Apply( d *Config ) {
-	if c.Rest != nil && d.Rest != nil { *c.Rest = *d.Rest }
+	if c.Rest != nil && d.Rest != nil {
+		d.Rest.APIVersion = c.Rest.APIVersion													// APIVersion and Version are ignored
+		d.Rest.Version = c.Rest.Version
+		*c.Rest = *d.Rest
+	}
 	if c.WireGuard != nil && d.WireGuard != nil { *c.WireGuard = *d.WireGuard }
-	if c.DoH != nil && d.DoH != nil { *c.DoH = *d.DoH }
-	if c.Plain != nil && d.Plain != nil { *c.Plain = *d.Plain }
+	// if c.DoH != nil && d.DoH != nil { *c.DoH = *d.DoH }										// Frontends should not change DoH or Plain settings
+	// if c.Plain != nil && d.Plain != nil { *c.Plain = *d.Plain }
 }

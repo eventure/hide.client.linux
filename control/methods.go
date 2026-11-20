@@ -36,9 +36,6 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			writer.WriteHeader( http.StatusOK )
 			encoder := json.NewEncoder( writer )
 			s.connection.Lock(); defer s.connection.Unlock()
-			accessToken, username, password := s.connection.Config.Rest.AccessToken, s.connection.Config.Rest.Username, s.connection.Config.Rest.Password
-			s.connection.Config.Rest.AccessToken, s.connection.Config.Rest.Username, s.connection.Config.Rest.Password = "", "", ""						// Clear sensitive data
-			defer func() { s.connection.Config.Rest.AccessToken, s.connection.Config.Rest.Username, s.connection.Config.Rest.Password = accessToken, username, password }()
 			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configuration GET failed: ", err ); return }
 			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
@@ -47,13 +44,15 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			decoder := json.NewDecoder( io.TeeReader( io.LimitReader( request.Body, 65536 ), logBuffer ) )*/
 			decoder := json.NewDecoder( io.LimitReader( request.Body, 65536 ) )
 			s.connection.Lock(); defer s.connection.Unlock()
-			if err := decoder.Decode( s.connection.Config ); err != nil {
+			newConfig := &connection.Config{}
+			if err := decoder.Decode( newConfig ); err != nil {
 				log.Println( "Serv: [ERR] Configuration POST failed:", err )
 				writer.WriteHeader( http.StatusBadRequest )
 				writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
 				return
 			}
 			// log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
+			s.connection.Config.Apply( newConfig )																										// Apply the configuration while avoiding sensitive fields
 			log.Println( "Serv: Configured from", request.RemoteAddr )
 			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "Serv: [ERR] Configuration save failed:", err ) }
 			writer.WriteHeader( http.StatusOK )																											// Return 200 OK even though SaveJson might have failed. After all, configuration was updated
@@ -132,14 +131,14 @@ func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.R
 	s.connection.Lock()
 	if changeType := s.connection.Config.Compare( newConfig ); changeType > 0 {																	// Let's check which kind of change did this configuration update introduce
 		log.Println( "CoCo: Configuration updated" )
-		s.connection.Config.Apply( newConfig )
+		s.connection.Config.Apply( newConfig )																									// Apply the configuration while avoiding sensitive fields
 		s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
 		if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "CoCo: [ERR] Configuration save failed:", err ) }
 		if changeType > connection.CHANGED {																									// Configuration update requires a shutdown
 			s.connection.Unlock()
 			log.Println( "CoCo: Configuration change requires shutdown" )
 			s.connection.Shutdown( false )																										// Skip state "clean" notification, a connect notification will follow soon enough
-		}
+		} else { s.connection.Unlock() }
 	} else { s.connection.Unlock() }
 	
 	switch code := s.connection.Code(); code {
@@ -161,7 +160,7 @@ func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.R
 		s.connection.SetConnectNotify(nil)
 		switch err {
 			case nil: log.Println( "CoCo: Connected" ); writer.Write( Result{ Result: s.connection.State() }.Json() )
-			default:  log.Println( "CoCo: [ERR] Connect failed: ", err ); writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: err.Error() } }.Json() )
+			default:  log.Println( "CoCo: [ERR] Connect failed:", err ); writer.Write( Result{ Error: &Error{ Code: CodeConnect, Message: err.Error() } }.Json() )
 		}
 		wg.Done()
 	} )
@@ -278,6 +277,10 @@ func ( s *Server ) requestToken( writer http.ResponseWriter, request *http.Reque
 		case nil: writer.Write( Result{ Result: accessToken }.Json() )
 		default:  writer.Write( Result{ Error: &Error{ Code: CodeToken, Message: err.Error() } }.Json() )
 	}
+	s.connection.Lock()
+	s.connection.Config.Rest.Username = ""																												// Clear the username and password
+	s.connection.Config.Rest.Password = ""
+	s.connection.Unlock()
 }
 
 func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
