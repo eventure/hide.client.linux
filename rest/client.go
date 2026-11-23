@@ -277,8 +277,11 @@ func ( c *Client ) ApplyFilter() {
 	defer cancel()
 	
 	if err := c.Config.Filter.Check(); err != nil { log.Println( "Fltr: [ERR] Bad filters:", err ); return }
-	c.Config.Filter.AccessToken = c.accessToken; defer func() { c.Config.Filter.AccessToken = nil }()
-	response, err := c.postJson( ctx, "https://10.255.255.250:4321/filter", c.Config.Filter )
+	filter := struct {
+		Filter
+		AccessToken	[]byte																															// The server expects an Access-Token in the request
+	}{ Filter: c.Config.Filter, AccessToken: c.accessToken }
+	response, err := c.postJson( ctx, "https://10.255.255.250:4321/filter", filter )
 	if err != nil { log.Println( "Fltr: [ERR] Setting filters failed:", err ); return }
 	
 	switch string(response) {
