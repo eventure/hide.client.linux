@@ -34,12 +34,13 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
 	}
 	switch request.Method {
+		case "HEAD": return
 		case "GET":
 			writer.WriteHeader( http.StatusOK )
 			encoder := json.NewEncoder( writer )
 			s.connection.Lock(); defer s.connection.Unlock()
-			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Serv: [ERR] Configuration GET failed: ", err ); return }
-			log.Println( "Serv: Configuration sent to", request.RemoteAddr )
+			if err := encoder.Encode( s.connection.Config ); err != nil { log.Println( "Conf: [ERR] Configuration encode failed: ", err ); return }
+			log.Println( "Conf: Configuration sent to", request.RemoteAddr )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationGet, Timestamp: time.Now() } )
 		case "POST":
 			/* logBuffer := &bytes.Buffer{}
@@ -48,15 +49,15 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 			s.connection.Lock(); defer s.connection.Unlock()
 			newConfig := &connection.Config{}
 			if err := decoder.Decode( newConfig ); err != nil {
-				log.Println( "Serv: [ERR] Configuration POST failed:", err )
+				log.Println( "Conf: [ERR] Configuration decode failed:", err )
 				writer.WriteHeader( http.StatusBadRequest )
 				writer.Write( Result{ Error: &Error{ Code: CodeConfig, Message: err.Error() } }.Json() )
 				return
 			}
-			// log.Println( "Serv: Configured from", request.RemoteAddr, "with", logBuffer.String() )
+			// log.Println( "Conf: Configured from", request.RemoteAddr, "with", logBuffer.String() )
 			s.connection.Config.Apply( newConfig )																										// Apply the configuration while avoiding sensitive fields
-			log.Println( "Serv: Configured from", request.RemoteAddr )
-			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "Serv: [ERR] Configuration save failed:", err ) }
+			log.Println( "Conf: Configured from", request.RemoteAddr )
+			if err := s.serverConfiguration.SaveJson(); err != nil { log.Println( "Conf: [ERR] Configuration save failed:", err ) }
 			writer.WriteHeader( http.StatusOK )																											// Return 200 OK even though SaveJson might have failed. After all, configuration was updated
 			writer.Write( Result{ Result: true }.Json() )
 			s.connection.StateNotify( &connection.State{ Code: connection.ConfigurationSet, Timestamp: time.Now()} )
@@ -65,7 +66,7 @@ func ( s *Server ) configuration( writer http.ResponseWriter, request *http.Requ
 }
 
 func ( s *Server ) route( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -81,7 +82,7 @@ func ( s *Server ) route( writer http.ResponseWriter, request *http.Request ) {
 }
 
 func ( s *Server ) connect( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -117,8 +118,6 @@ func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.R
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
 	}
-	
-	if request.Method != "POST" { log.Println( "CoCo: [ERR] configureConnect is POST" ); http.Error( writer, "not found", http.StatusNotFound ); return }
 	writer.Header().Add( "content-type", "application/json" )
 	
 	decoder := json.NewDecoder( io.LimitReader( request.Body, 65536 ) )
@@ -172,7 +171,7 @@ func ( s *Server ) configureConnect( writer http.ResponseWriter, request *http.R
 
 // disconnect is gentle, leaves the client in "routed" state, i.e. leak protection might be active when configured
 func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -184,7 +183,7 @@ func ( s *Server ) disconnect( writer http.ResponseWriter, request *http.Request
 }
 
 func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -196,7 +195,7 @@ func ( s *Server ) shutdown( writer http.ResponseWriter, request *http.Request )
 
 // destroy is harsh, disconnects and removes everything set up by Init()
 func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -209,7 +208,7 @@ func ( s *Server ) destroy( writer http.ResponseWriter, request *http.Request ) 
 }
 
 func ( s *Server ) state( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -219,8 +218,7 @@ func ( s *Server ) state( writer http.ResponseWriter, request *http.Request ) {
 }
 
 func ( s *Server ) watch( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
-
+	if request.Method == http.MethodHead { return }
 	writer.Header().Add( "content-type", "application/json" )
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -246,6 +244,7 @@ func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
 			writer.Header().Add( "content-type", "application/json" )
 			s.connection.Lock(); defer s.connection.Unlock()
 			writer.Write( Result{ Result: os.Remove( s.connection.Config.Rest.AccessTokenPath ) }.Json() )
+		case "HEAD": return
 		case "GET":
 			writer.Header().Add( "content-type", "application/json" )
 			switch accessToken, err := s.connection.AccessTokenFetch( true ); err {
@@ -259,7 +258,6 @@ func ( s *Server ) token( writer http.ResponseWriter, request *http.Request ) {
 }
 
 func ( s *Server ) requestToken( writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "POST" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
 	select {
 		case s.connectionOpsLock <- struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -286,6 +284,7 @@ func ( s *Server ) requestToken( writer http.ResponseWriter, request *http.Reque
 }
 
 func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
+	if request.Method == http.MethodHead { return }
 	logs := []byte( nil )
 	if ringLog, ok := log.Writer().( *RingLog ); ok { logs = ringLog.Dump() }
 	switch request.Method {
@@ -302,7 +301,7 @@ func ( s *Server ) log( writer http.ResponseWriter, request *http.Request ) {
 var cacheControlRegex = regexp.MustCompile( "[[:space:]]*max-age[[:space:]]*=[[:space:]]*([[:digit:]]+)" )
 
 func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -344,7 +343,7 @@ func ( s *Server ) serverList(writer http.ResponseWriter, request *http.Request 
 }
 
 func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
@@ -359,14 +358,14 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 }
 
 func ( s *Server ) version(writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	writer.Header().Add( "content-type", "application/json" )
 	log.Println( "vers: Sending version", s.connection.Rest.Version )
 	writer.Write( []byte( s.connection.Rest.Version ) )
 }
 
 func ( s *Server ) tokenExists(writer http.ResponseWriter, request *http.Request ) {
-	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	if request.Method == http.MethodHead { return }
 	select {
 		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
 		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
