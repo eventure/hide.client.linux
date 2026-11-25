@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	
@@ -357,7 +359,34 @@ func ( s *Server ) externalIps(writer http.ResponseWriter, request *http.Request
 }
 
 func ( s *Server ) version(writer http.ResponseWriter, request *http.Request ) {
+	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
 	writer.Header().Add( "content-type", "application/json" )
 	log.Println( "vers: Sending version", s.connection.Rest.Version )
 	writer.Write( []byte( s.connection.Rest.Version ) )
+}
+
+func ( s *Server ) tokenExists(writer http.ResponseWriter, request *http.Request ) {
+	if request.Method != "GET" { http.Error( writer, http.StatusText( http.StatusNotFound ), http.StatusNotFound ); return }
+	select {
+		case s.connectionOpsLock<-struct{}{}: defer func() { <-s.connectionOpsLock }(); break
+		case <-time.NewTimer( time.Second ).C: http.Error( writer, http.StatusText( http.StatusConflict ), http.StatusConflict ); return
+	}
+	writer.Header().Add( "content-type", "application/json" )
+	s.connection.Lock(); defer s.connection.Unlock()
+	if len(s.connection.Rest.AccessToken) > 0 { log.Println( "toEx: Token exists in config" ); writer.Write( Result{ Result: true }.Json() ); return }
+	if len(s.connection.Rest.AccessTokenPath) > 0 {
+		file, err := os.ReadFile( s.connection.Rest.AccessTokenPath )
+		if err != nil {
+			log.Println( "toEx: Read access token file at", s.connection.Config.Rest.AccessTokenPath, "failed :", err )
+			writer.Write( Result{ Result: false }.Json() )
+			return
+		}
+		if _, err = base64.StdEncoding.DecodeString( strings.TrimSpace( string(file) ) ); err != nil {
+			log.Println( "toEx: Decode access token file at", s.connection.Config.Rest.AccessTokenPath, "failed :", err )
+			writer.Write( Result{ Result: false }.Json() )
+			return
+		}
+		log.Println( "toEx: Token exists in file" )
+		writer.Write( Result{ Result: true }.Json() )
+	}
 }
